@@ -763,6 +763,25 @@ export default function SettingsPanel({
                 </div>
               </div>
 
+              {/* Background Image configuration */}
+              <div className="space-y-1 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Plano de Fundo Customizado (URL)</label>
+                <input
+                  id="input-background-image"
+                  type="text"
+                  value={settings.general.backgroundImage || ''}
+                  onChange={(e) => setSettings({
+                    ...settings,
+                    general: { ...settings.general, backgroundImage: e.target.value }
+                  })}
+                  placeholder="Ex: https://exemplo.com/fundo.jpg ou arquivo local (C:\img.jpg)..."
+                  className="w-full text-xs p-2.5 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900/40 dark:text-slate-200"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Insira um link direto de imagem/GIF para utilizar no fundo do aplicativo (sugerido: 1920x1080). Limpe o campo para utilizar a cor sólida correspondente ao tema.
+                </p>
+              </div>
+
               {/* Maintenance database operations */}
               <div className="p-3 rounded-xl border border-red-100 dark:border-red-900/20 bg-red-50/25 dark:bg-red-950/5 space-y-2 mt-4">
                 <p className="text-xs font-bold text-rose-700 dark:text-rose-400">Manutenção de Banco de Dados</p>

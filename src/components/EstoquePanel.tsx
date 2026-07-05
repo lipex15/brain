@@ -50,6 +50,8 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
   const [warrantyType, setWarrantyType] = useState<string>('24');
   const [customWarrantyHours, setCustomWarrantyHours] = useState<string>('12');
 
+  const [sortProductBy, setSortProductBy] = useState<'alpha' | 'quantity' | 'recent'>('alpha');
+
   useEffect(() => {
     fetchProducts();
     const handleStockRefresh = () => fetchProducts();
@@ -204,13 +206,17 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
   const totalSold = products.reduce((sum, p) => sum + ((p.totalCount || 0) - (p.availableCount || 0)), 0);
   const lowStockAlerts = products.filter(p => (p.availableCount || 0) <= p.minWarning).length;
 
-  const filteredProducts = products
+  const filteredProducts = [...products]
     .filter(p => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
       return p.name.toLowerCase().includes(q) || p.platform.toLowerCase().includes(q) || (p.category && p.category.toLowerCase().includes(q));
     })
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    .sort((a, b) => {
+      if (sortProductBy === 'alpha') return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+      if (sortProductBy === 'quantity') return (b.availableCount || 0) - (a.availableCount || 0);
+      return b.id.localeCompare(a.id); // recent (ID has timestamp)
+    });
 
   return (
     <div className="space-y-6">
@@ -281,6 +287,18 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
             />
           </div>
 
+          <div className="flex-shrink-0">
+            <select
+              value={sortProductBy}
+              onChange={(e) => setSortProductBy(e.target.value as any)}
+              className="h-full text-xs font-bold px-3 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950/40 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="alpha">A-Z (Alfabética)</option>
+              <option value="quantity">Maior Estoque</option>
+              <option value="recent">Recém Editado</option>
+            </select>
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={fetchProducts}
@@ -309,7 +327,7 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
             <p className="text-[11px] text-slate-500 max-w-xs mx-auto mt-0.5">Clique em + Adicionar Produto para criar um perfil de estoque.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
+          <div className="flex flex-col gap-2">
             {filteredProducts.map((p) => {
               const isLow = (p.availableCount || 0) <= p.minWarning;
               const isOutOfStock = p.availableCount === 0;
@@ -318,14 +336,13 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
               return (
                 <div
                   key={p.id}
-                  className={`border rounded-xl p-3 transition-all flex flex-col gap-2 ${isSelected
+                  className={`border rounded-xl p-2.5 sm:p-3 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isSelected
                     ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500 dark:border-indigo-700'
                     : 'bg-white dark:bg-slate-900/70 border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                 >
-                  {/* Top: platform badge + stock count */}
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${p.platform === 'ggmax' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900/40' :
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <span className={`flex-shrink-0 w-[60px] text-center text-[9px] font-bold uppercase px-1.5 py-1 rounded border ${p.platform === 'ggmax' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900/40' :
                       p.platform === 'gamemarket' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40' :
                         p.platform === 'desapego' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/40' :
                           p.platform === 'todas' ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900/40' :
@@ -333,47 +350,61 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
                       }`}>
                       {p.platform === 'todas' ? 'MULTI' : p.platform.toUpperCase()}
                     </span>
-                    <div className="flex items-center gap-1">
+
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <h4 className="text-[12px] font-bold text-slate-900 dark:text-white leading-tight truncate" title={p.name}>
+                        {p.name}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-slate-500 font-medium truncate">{p.category || 'Outros'}</span>
+
+                        {(p.activeWarrantyCount || 0) > 0 && (
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20" title={`${p.activeWarrantyCount} conta(s) com garantia ativa`}>
+                            <ShieldCheck className="w-3 h-3 text-amber-500" />
+                            <span>{p.activeWarrantyCount} GARAN.</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/60 pt-2 sm:pt-0">
+
+                    <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
                       {(isOutOfStock || isLow) && (
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOutOfStock ? 'bg-rose-500' : 'bg-amber-400'}`} title={isOutOfStock ? 'Esgotado' : 'Estoque baixo'} />
                       )}
                       <span className={`text-[11px] font-black ${isOutOfStock ? 'text-rose-500' : isLow ? 'text-amber-500' : 'text-slate-900 dark:text-white'
-                        }`}>{p.availableCount}</span>
+                        }`}>Estoque: {p.availableCount}</span>
                       <span className="text-[9px] text-slate-400 font-semibold">/{p.totalCount}</span>
                     </div>
-                  </div>
 
-                  {/* Product Name */}
-                  <h4 className="text-[11px] font-bold text-slate-900 dark:text-white leading-tight line-clamp-2 flex-1" title={p.name}>
-                    {p.name}
-                  </h4>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800/60">
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => { setEditingProduct(p); setShowAddProductModal(true); }}
-                        className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded cursor-pointer transition-all"
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer transition-all"
                         title="Editar produto"
                       >
-                        <Edit2 className="w-3 h-3" />
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteProduct(p.id, p.name)}
-                        className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded cursor-pointer transition-all"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded cursor-pointer transition-all"
                         title="Deletar produto"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                      <button
+                        onClick={() => setSelectedProduct(isSelected ? null : p)}
+                        className={`px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold rounded-md flex items-center gap-1 cursor-pointer transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                          }`}
+                      >
+                        {isSelected ? 'Fechar' : 'Contas'}
+                        {isSelected ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                       </button>
                     </div>
-                    <button
-                      onClick={() => setSelectedProduct(isSelected ? null : p)}
-                      className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md flex items-center gap-0.5 cursor-pointer transition-all ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                        }`}
-                    >
-                      {isSelected ? 'Fechar' : 'Itens'}
-                      {isSelected ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-                    </button>
+
                   </div>
                 </div>
               );

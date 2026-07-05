@@ -25,6 +25,7 @@ export interface AppSettings {
     soundEnabled: boolean;
     browserAlerts: boolean;
     theme: 'claro' | 'escuro';
+    backgroundImage?: string; // New URL or path for custom wallpaper
   };
 }
 
@@ -61,6 +62,7 @@ export interface StockProduct {
   minWarning?: number;
   availableCount?: number;
   totalCount?: number;
+  activeWarrantyCount?: number;
 }
 
 export interface StockInventoryItem {
@@ -132,5 +134,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     soundEnabled: true,
     browserAlerts: true,
     theme: 'claro',
+    backgroundImage: '',
   },
 };

@@ -516,10 +516,23 @@ export default function App() {
     });
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans antialiased text-slate-800 dark:text-slate-100 flex flex-col transition-colors">
+    <div
+      className="min-h-screen font-sans antialiased text-slate-800 dark:text-slate-100 flex flex-col transition-colors relative"
+      style={{
+        backgroundColor: settings.general.backgroundImage ? undefined : (settings.general.theme === 'escuro' ? '#020617' : '#f8fafc'),
+        backgroundImage: settings.general.backgroundImage ? `url(${settings.general.backgroundImage})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Background overlay if image is set, to ensure text legibility */}
+      {settings.general.backgroundImage && (
+        <div className="absolute inset-0 bg-white/70 dark:bg-slate-950/80 backdrop-blur-sm z-0 pointer-events-none" />
+      )}
 
       {/* 1. TOP HEADER NAVIGATION BAR */}
-      <header className="sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800/80 shadow-xs px-4 md:px-8 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/80 shadow-xs px-4 md:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           {avatarUrl && avatarUrl !== 'svg' ? (
             <img
@@ -593,6 +606,39 @@ export default function App() {
 
         {/* Global Controls & Mobile Toggles */}
         <div className="flex items-center gap-3">
+
+          {/* Status Cards (Moved from footer) */}
+          <div className="hidden lg:flex items-center justify-end gap-2 pr-3 border-r border-slate-200 dark:border-slate-800">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors shadow-xs ${systemStatus.discord.connected
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-450 dark:border-emerald-500/20'
+                : 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-500/10 dark:text-rose-450 dark:border-rose-500/20'
+                }`}
+              title={`Discord: ${systemStatus.discord.statusText}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${systemStatus.discord.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+              Discord
+            </span>
+
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors shadow-xs ${systemStatus.whatsapp.status === 'conectado'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-450 dark:border-emerald-500/20'
+                : 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-500/10 dark:text-rose-450 dark:border-rose-500/20'
+                }`}
+              title={`WhatsApp: ${systemStatus.whatsapp.statusText}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${systemStatus.whatsapp.status === 'conectado' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+              WhatsApp
+            </span>
+
+            {activeWarranties.length > 0 && (
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-500/20 shadow-xs animate-pulse">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-500" />
+                <span>{activeWarranties.length} {activeWarranties.length === 1 ? 'GARANTIA' : 'GARANTIAS'}</span>
+              </div>
+            )}
+          </div>
+
           {/* Quick Theme toggler */}
           <button
             id="btn-quick-theme-toggle"
@@ -1163,37 +1209,9 @@ export default function App() {
       </AnimatePresence>
 
       {/* 3. SYSTEM STATUS OVERALL RUNNING FOOTER */}
-      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-850/60 px-4 md:px-8 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
-        <div className="flex flex-wrap items-center gap-3 flex-1 flex-row">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${systemStatus.discord.connected
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 border-emerald-500/20'
-                : 'bg-rose-500/10 text-rose-600 dark:text-rose-450 border-rose-500/20'
-              }`}
-            title={`Discord: ${systemStatus.discord.statusText}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${systemStatus.discord.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-            Discord
-          </span>
-
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${systemStatus.whatsapp.status === 'conectado'
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-450 border-emerald-500/20'
-                : 'bg-rose-500/10 text-rose-600 dark:text-rose-450 border-rose-500/20'
-              }`}
-            title={`WhatsApp: ${systemStatus.whatsapp.statusText}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${systemStatus.whatsapp.status === 'conectado' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-            WhatsApp
-          </span>
-
-          {activeWarranties.length > 0 && (
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20 animate-pulse">
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-              <span>{activeWarranties.length} {activeWarranties.length === 1 ? 'GARANTIA ATIVA' : 'GARANTIAS ATIVAS'}</span>
-            </div>
-          )}
-        </div>
+      <footer className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-t border-slate-200 dark:border-slate-850/60 px-4 md:px-8 py-2 flex items-center justify-between gap-3 text-[10px] text-slate-500 relative z-10">
+        <span>© {new Date().getFullYear()} deathStuffs brain</span>
+        <span className="font-medium text-slate-400">Pronto para operação</span>
       </footer>
 
     </div>

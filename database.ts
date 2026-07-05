@@ -236,12 +236,14 @@ export function getStockSummary(): StockProduct[] {
   const countStmt = db.prepare(`
     SELECT
       SUM(CASE WHEN status = 'disponivel' THEN 1 ELSE 0 END) as availableCount,
-      COUNT(*) as totalCount
+      COUNT(*) as totalCount,
+      SUM(CASE WHEN status = 'disponivel' AND warrantyExpiresAt IS NOT NULL AND warrantyExpiresAt > ? THEN 1 ELSE 0 END) as activeWarrantyCount
     FROM items WHERE product_id = ?
   `);
 
+  const now = new Date().toISOString();
   for (const p of products) {
-    const counts = countStmt.get(p.id) as any;
+    const counts = countStmt.get(now, p.id) as any;
     summary.push({
       id: p.id,
       name: p.name,
@@ -250,7 +252,8 @@ export function getStockSummary(): StockProduct[] {
       price: p.price,
       minWarning: p.minWarning,
       availableCount: counts ? (counts.availableCount || 0) : 0,
-      totalCount: counts ? (counts.totalCount || 0) : 0
+      totalCount: counts ? (counts.totalCount || 0) : 0,
+      activeWarrantyCount: counts ? (counts.activeWarrantyCount || 0) : 0
     });
   }
 
