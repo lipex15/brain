@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -26,7 +26,8 @@
     "publish": {
       "provider": "github",
       "owner": "lipex15",
-      "repo": "brain"
+      "repo": "brain",
+      "releaseType": "release"
     },
     "files": [
       "dist/**/*",
