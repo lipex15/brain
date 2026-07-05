@@ -127,6 +127,7 @@ export default function App() {
   // Warranty Emergency Alert State
   const [activeWarrantyAlerts, setActiveWarrantyAlerts] = useState<any[]>([]);
   const [activeWarranties, setActiveWarranties] = useState<any[]>([]);
+  const [forceWarrantyFilter, setForceWarrantyFilter] = useState(false);
 
   // --- AUDIO SYNTHESIS ENGINE ---
   // Uses Web Audio API to create a crystal-clear cash-register chime or synth ring.
@@ -329,7 +330,7 @@ export default function App() {
     try {
       const res = await fetch('/api/status');
       const data = await res.json();
-      setSystemStatus(data);
+      setSystemStatus((prev) => ({ ...prev, ...data }));
     } catch (e) {
       console.error('Error fetching status:', e);
     }
@@ -524,13 +525,21 @@ export default function App() {
     <div
       className="min-h-screen font-sans antialiased text-slate-800 dark:text-slate-100 flex flex-col transition-colors relative"
       style={{
-        backgroundColor: settings.general.backgroundImage ? undefined : (settings.general.theme === 'escuro' ? '#020617' : '#f8fafc'),
-        backgroundImage: settings.general.backgroundImage ? `url(${settings.general.backgroundImage})` : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed'
+        backgroundColor: settings.general.theme === 'escuro' ? '#020617' : '#f8fafc'
       }}
     >
+      <div
+        className={`fixed inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${settings.general.backgroundImage ? 'opacity-100' : 'opacity-0'
+          }`}
+        style={{
+          backgroundImage: settings.general.backgroundImage
+            ? (settings.general.backgroundImage.startsWith('file:///')
+              ? `url(http://localhost:3000/api/local-image?path=${encodeURIComponent(settings.general.backgroundImage)})`
+              : `url(${settings.general.backgroundImage})`)
+            : 'none',
+        }}
+      />
+
       {/* Background overlay if image is set, to ensure text legibility */}
       {settings.general.backgroundImage && (
         <div className="absolute inset-0 bg-white/70 dark:bg-slate-950/80 backdrop-blur-sm z-0 pointer-events-none" />
@@ -571,9 +580,14 @@ export default function App() {
                   <p className="text-emerald-400 font-bold text-sm tracking-tight truncate">Atualização Pronta</p>
                   <p className="text-xs text-slate-400 mt-0.5 leading-tight">Uma nova versão foi baixada. Deseja aplicar agora?</p>
                 </div>
-                <button onClick={() => fetch('/api/system/updater-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'install' }) })} className="ml-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] uppercase tracking-wider font-bold px-4 py-2 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 whitespace-nowrap cursor-pointer">
-                  Reiniciar
-                </button>
+                <div className="flex gap-2 ml-2">
+                  <button onClick={() => setSystemStatus((prev) => ({ ...prev, updater: { status: 'none', progress: 0 } }))} className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] uppercase tracking-wider font-bold px-3 py-2 rounded-xl transition-all cursor-pointer">
+                    Fechar
+                  </button>
+                  <button onClick={() => fetch('/api/system/updater-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'install' }) })} className="bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] uppercase tracking-wider font-bold px-3 py-2 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 whitespace-nowrap cursor-pointer">
+                    Instalar e Abrir
+                  </button>
+                </div>
               </>
             ) : systemStatus.updater.status === 'error' ? (
               <>
@@ -699,10 +713,10 @@ export default function App() {
             </span>
 
             {activeWarranties.length > 0 && (
-              <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-500/20 shadow-xs animate-pulse">
+              <button onClick={() => { setActiveTab('estoque'); setForceWarrantyFilter(true); }} className="cursor-pointer inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 hover:bg-amber-200 dark:hover:bg-amber-500/20 transition-colors px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-500/20 shadow-xs animate-pulse">
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-500" />
                 <span>{activeWarranties.length} {activeWarranties.length === 1 ? 'GARANTIA' : 'GARANTIAS'}</span>
-              </div>
+              </button>
             )}
           </div>
 
@@ -1210,6 +1224,8 @@ export default function App() {
             <EstoquePanel
               notifications={notifications}
               onUpdateNotification={handleUpdateNotification}
+              forceWarrantyFilter={forceWarrantyFilter}
+              onClearWarrantyFilter={() => setForceWarrantyFilter(false)}
             />
           </div>
         )}

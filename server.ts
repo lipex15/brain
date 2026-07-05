@@ -13,6 +13,7 @@ import pkg from "whatsapp-web.js";
 const { Client: WhatsAppClient, LocalAuth } = pkg;
 import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory } from "./src/types.js";
 import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase } from "./database.js";
+import cors from "cors";
 
 // Ensure Node ESM/CJS dual compatibility
 import { fileURLToPath } from "url";
@@ -22,6 +23,23 @@ const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_fi
 const app = express();
 const PORT = 3000;
 
+app.get('/api/local-image', (req, res) => {
+  const filePath = req.query.path as string;
+  if (!filePath) {
+    return res.status(400).send('No path provided');
+  }
+  // Remove file:/// if present
+  const cleanPath = filePath.replace(/^file:\/\/\/?/, '');
+  res.sendFile(cleanPath, (err) => {
+    if (err) {
+      console.error('[SISTEMA] [ERRO] Falha ao carregar BG local:', err);
+      // fallback to 404 transparent
+      res.status(404).end();
+    }
+  });
+});
+
+app.use(cors());
 app.use(express.json());
 
 // --- 1. DYNAMIC STORAGE PATHS ---

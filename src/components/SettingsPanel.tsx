@@ -23,7 +23,10 @@ import {
   Monitor,
   QrCode,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Image,
+  X
 } from 'lucide-react';
 import { AppSettings, SystemStatus } from '../types';
 
@@ -764,22 +767,59 @@ export default function SettingsPanel({
               </div>
 
               {/* Background Image configuration */}
-              <div className="space-y-1 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Plano de Fundo Customizado (URL)</label>
-                <input
-                  id="input-background-image"
-                  type="text"
-                  value={settings.general.backgroundImage || ''}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    general: { ...settings.general, backgroundImage: e.target.value }
-                  })}
-                  placeholder="Ex: https://exemplo.com/fundo.jpg ou arquivo local (C:\img.jpg)..."
-                  className="w-full text-xs p-2.5 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900/40 dark:text-slate-200"
-                />
-                <p className="text-[10px] text-slate-500">
-                  Insira um link direto de imagem/GIF para utilizar no fundo do aplicativo (sugerido: 1920x1080). Limpe o campo para utilizar a cor sólida correspondente ao tema.
-                </p>
+              <div className="space-y-3 p-4 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/10 transition-colors">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Plano de Fundo Customizado</label>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Envie um arquivo do seu computador ou cole um link direto (URL) para usar de fundo. Limpe para usar cor sólida.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  <div className="relative">
+                    <input
+                      id="input-bg-file"
+                      type="file"
+                      accept="image/*,video/mp4"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const localPath = (file as any).path;
+                          if (localPath) {
+                            // Convert backslashes to forward slashes for cross-platform compatibility in URLs
+                            const sanitizedPath = localPath.replace(/\\/g, '/');
+                            setSettings({ ...settings, general: { ...settings.general, backgroundImage: `file:///${sanitizedPath}` } });
+                          }
+                        }
+                      }}
+                    />
+                    <button type="button" className="pointer-events-none flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all hover:bg-indigo-100 dark:hover:bg-indigo-900/50">
+                      <Image className="w-4 h-4" />
+                      Escolher Imagem
+                    </button>
+                  </div>
+
+                  <div className="flex-1 w-full relative">
+                    <input
+                      id="input-background-image"
+                      type="text"
+                      value={settings.general.backgroundImage || ''}
+                      onChange={(e) => setSettings({ ...settings, general: { ...settings.general, backgroundImage: e.target.value } })}
+                      placeholder="Ou cole URL..."
+                      className="w-full text-xs p-2.5 pl-3 pr-8 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900/40 dark:text-slate-200"
+                    />
+                    {settings.general.backgroundImage && (
+                      <button
+                        type="button"
+                        onClick={() => setSettings({ ...settings, general: { ...settings.general, backgroundImage: '' } })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Maintenance database operations */}
