@@ -25,8 +25,8 @@
     "icon": "build/icon.png",
     "publish": {
       "provider": "github",
-      "owner": "feliper01",
-      "repo": "deathstuffs-brain"
+      "owner": "lipex15",
+      "repo": "brain"
     },
     "files": [
       "dist/**/*",
