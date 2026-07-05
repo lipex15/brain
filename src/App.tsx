@@ -529,7 +529,7 @@ export default function App() {
       }}
     >
       <div
-        className={`fixed inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${settings.general.backgroundImage ? 'opacity-100' : 'opacity-0'
+        className={`fixed inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 pointer-events-none ${settings.general.backgroundImage ? 'opacity-100' : 'opacity-0'
           }`}
         style={{
           backgroundImage: settings.general.backgroundImage
