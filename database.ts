@@ -237,7 +237,7 @@ export function getStockSummary(): StockProduct[] {
     SELECT
       SUM(CASE WHEN status = 'disponivel' THEN 1 ELSE 0 END) as availableCount,
       COUNT(*) as totalCount,
-      SUM(CASE WHEN status = 'disponivel' AND warrantyExpiresAt IS NOT NULL AND warrantyExpiresAt > ? THEN 1 ELSE 0 END) as activeWarrantyCount
+      SUM(CASE WHEN status = 'disponivel' AND warranty_expires_at IS NOT NULL AND warranty_expires_at > ? THEN 1 ELSE 0 END) as activeWarrantyCount
     FROM items WHERE product_id = ?
   `);
 

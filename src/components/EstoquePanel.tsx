@@ -327,7 +327,7 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
             <p className="text-[11px] text-slate-500 max-w-xs mx-auto mt-0.5">Clique em + Adicionar Produto para criar um perfil de estoque.</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
             {filteredProducts.map((p) => {
               const isLow = (p.availableCount || 0) <= p.minWarning;
               const isOutOfStock = p.availableCount === 0;
@@ -336,75 +336,72 @@ export default function EstoquePanel({ notifications, onUpdateNotification }: Es
               return (
                 <div
                   key={p.id}
-                  className={`border rounded-xl p-2.5 sm:p-3 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isSelected
-                    ? 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500 dark:border-indigo-700'
-                    : 'bg-white dark:bg-slate-900/70 border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700'
-                    }`}
+                  className={`border rounded-xl p-3 transition-all flex flex-col justify-between gap-3 h-full bg-white dark:bg-slate-900/70 border-slate-200 dark:border-slate-800/80 hover:border-indigo-400 dark:hover:border-indigo-500 shadow-xs hover:shadow-md ${isSelected ? 'ring-2 ring-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/20' : ''}`}
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span className={`flex-shrink-0 w-[60px] text-center text-[9px] font-bold uppercase px-1.5 py-1 rounded border ${p.platform === 'ggmax' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900/40' :
+                  <div className="flex items-start gap-3">
+                    <span className={`flex-shrink-0 w-14 text-center text-[10px] tracking-wide font-black uppercase px-2 py-1.5 rounded-lg border ${p.platform === 'ggmax' ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-900/40' :
                       p.platform === 'gamemarket' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/40' :
                         p.platform === 'desapego' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/40' :
                           p.platform === 'todas' ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-900/40' :
                             'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                       }`}>
-                      {p.platform === 'todas' ? 'MULTI' : p.platform.toUpperCase()}
+                      {p.platform === 'todas' ? 'ALL' : p.platform.toUpperCase()}
                     </span>
 
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <h4 className="text-[12px] font-bold text-slate-900 dark:text-white leading-tight truncate" title={p.name}>
+                    <div className="flex flex-col min-w-0 flex-1 mt-0.5">
+                      <h4 className="text-[13px] font-black text-slate-900 dark:text-white leading-tight truncate" title={p.name}>
                         {p.name}
                       </h4>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-slate-500 font-medium truncate">{p.category || 'Outros'}</span>
-
-                        {(p.activeWarrantyCount || 0) > 0 && (
-                          <div className="flex items-center gap-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20" title={`${p.activeWarrantyCount} conta(s) com garantia ativa`}>
-                            <ShieldCheck className="w-3 h-3 text-amber-500" />
-                            <span>{p.activeWarrantyCount} GARAN.</span>
-                          </div>
-                        )}
-                      </div>
+                      <span className="text-[11px] text-slate-500 font-medium truncate mt-0.5">{p.category || 'Outros'}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/60 pt-2 sm:pt-0">
+                  <div className="flex flex-col gap-3 mt-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-800">
+                        {(isOutOfStock || isLow) && (
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isOutOfStock ? 'bg-rose-500 animate-pulse' : 'bg-amber-400'}`} title={isOutOfStock ? 'Esgotado' : 'Estoque baixo'} />
+                        )}
+                        <span className={`text-[11px] font-black ${isOutOfStock ? 'text-rose-500' : isLow ? 'text-amber-500' : 'text-slate-900 dark:text-slate-100'
+                          }`}>Estoque: {p.availableCount}</span>
+                        <span className="text-[10px] text-slate-400 font-bold">/{p.totalCount}</span>
+                      </div>
 
-                    <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/40 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
-                      {(isOutOfStock || isLow) && (
-                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOutOfStock ? 'bg-rose-500' : 'bg-amber-400'}`} title={isOutOfStock ? 'Esgotado' : 'Estoque baixo'} />
+                      {(p.activeWarrantyCount || 0) > 0 && (
+                        <div className="flex items-center gap-1 text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/30 shadow-xs" title={`${p.activeWarrantyCount} conta(s) com garantia ativa`}>
+                          <ShieldCheck className="w-3 h-3 text-amber-500" />
+                          <span>{p.activeWarrantyCount}</span>
+                        </div>
                       )}
-                      <span className={`text-[11px] font-black ${isOutOfStock ? 'text-rose-500' : isLow ? 'text-amber-500' : 'text-slate-900 dark:text-white'
-                        }`}>Estoque: {p.availableCount}</span>
-                      <span className="text-[9px] text-slate-400 font-semibold">/{p.totalCount}</span>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => { setEditingProduct(p); setShowAddProductModal(true); }}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded cursor-pointer transition-all"
-                        title="Editar produto"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(p.id, p.name)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded cursor-pointer transition-all"
-                        title="Deletar produto"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                      <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setEditingProduct(p); setShowAddProductModal(true); }}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md cursor-pointer transition-colors"
+                          title="Editar produto"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(p.id, p.name)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md cursor-pointer transition-colors"
+                          title="Deletar produto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
                       <button
                         onClick={() => setSelectedProduct(isSelected ? null : p)}
-                        className={`px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold rounded-md flex items-center gap-1 cursor-pointer transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                        className={`px-3 py-1.5 text-[10px] uppercase tracking-wider font-extrabold rounded-md flex items-center gap-1.5 cursor-pointer transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:shadow-xs'
                           }`}
                       >
-                        {isSelected ? 'Fechar' : 'Contas'}
-                        {isSelected ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        {isSelected ? 'Ocultar Contas' : 'Gerenciar'}
+                        {isSelected ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </button>
                     </div>
-
                   </div>
                 </div>
               );
