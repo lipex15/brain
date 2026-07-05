@@ -10,9 +10,10 @@ interface EstoquePanelProps {
   onUpdateNotification: (id: string, updates: Partial<NotificationItem>) => Promise<void>;
   forceWarrantyFilter?: boolean;
   onClearWarrantyFilter?: () => void;
+  globalSearchQuery?: string;
 }
 
-export default function EstoquePanel({ notifications, onUpdateNotification, forceWarrantyFilter, onClearWarrantyFilter }: EstoquePanelProps) {
+export default function EstoquePanel({ notifications, onUpdateNotification, forceWarrantyFilter, onClearWarrantyFilter, globalSearchQuery }: EstoquePanelProps) {
   const [products, setProducts] = useState<StockProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,6 +60,11 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
     if (forceWarrantyFilter) setFilterWarranty('warranty');
   }, [forceWarrantyFilter]);
 
+  useEffect(() => {
+    if (globalSearchQuery) {
+      setSearchQuery(globalSearchQuery);
+    }
+  }, [globalSearchQuery]);
 
   useEffect(() => {
     fetchProducts();

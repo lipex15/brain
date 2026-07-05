@@ -129,6 +129,10 @@ export default function App() {
   const [activeWarranties, setActiveWarranties] = useState<any[]>([]);
   const [forceWarrantyFilter, setForceWarrantyFilter] = useState(false);
 
+  // Global Stock Cache for Notification Matching
+  const [stockProducts, setStockProducts] = useState<any[]>([]);
+  const [globalStockSearch, setGlobalStockSearch] = useState<string>('');
+
   // --- AUDIO SYNTHESIS ENGINE ---
   // Uses Web Audio API to create a crystal-clear cash-register chime or synth ring.
   // Completely offline-ready and doesn't rely on asset files.
@@ -201,6 +205,11 @@ export default function App() {
     fetchNotifications();
     fetchSystemStatus();
     fetchActiveWarranties();
+    fetchGlobalStock();
+
+    // Listen to local stock updates
+    const handleStockRefresh = () => fetchGlobalStock();
+    window.addEventListener('stock_refresh', handleStockRefresh);
 
     // Periodic sweep for active warranties count (every 30s)
     const warrantyInterval = setInterval(() => {
@@ -277,6 +286,7 @@ export default function App() {
 
     return () => {
       clearInterval(warrantyInterval);
+      window.removeEventListener('stock_refresh', handleStockRefresh);
       if (sseRef.current) {
         sseRef.current.close();
       }
@@ -304,6 +314,13 @@ export default function App() {
     } catch (e) {
       console.error('Error fetching active warranties:', e);
     }
+  };
+
+  const fetchGlobalStock = async () => {
+    try {
+      const res = await fetch('/api/stock/products');
+      if (res.ok) setStockProducts(await res.json());
+    } catch (e) { }
   };
 
   const fetchSettings = async () => {
@@ -1136,6 +1153,11 @@ export default function App() {
                     <NotificationCard
                       key={notif.id}
                       notification={notif}
+                      stockProducts={stockProducts}
+                      onNavigateToStock={(query: string) => {
+                        setGlobalStockSearch(query);
+                        setActiveTab('estoque');
+                      }}
                       onUpdate={handleUpdateNotification}
                       onDelete={handleDeleteNotification}
                     />
@@ -1226,6 +1248,7 @@ export default function App() {
               onUpdateNotification={handleUpdateNotification}
               forceWarrantyFilter={forceWarrantyFilter}
               onClearWarrantyFilter={() => setForceWarrantyFilter(false)}
+              globalSearchQuery={globalStockSearch}
             />
           </div>
         )}

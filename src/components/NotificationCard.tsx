@@ -5,36 +5,39 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Check, 
-  Clock, 
-  ExternalLink, 
-  Trash2, 
-  ChevronDown, 
-  ChevronUp, 
-  MessageSquare, 
-  AlertOctagon, 
-  AlertTriangle, 
-  Info, 
-  Eye, 
-  EyeOff, 
-  Save, 
-  ShoppingBag, 
-  ShieldAlert, 
+import {
+  Check,
+  Clock,
+  ExternalLink,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+  AlertOctagon,
+  AlertTriangle,
+  Info,
+  Eye,
+  EyeOff,
+  Save,
+  ShoppingBag,
+  ShieldAlert,
   HelpCircle,
   TrendingUp,
-  Tag
+  Tag,
+  PackageCheck
 } from 'lucide-react';
-import { NotificationItem, NotificationPlatform, NotificationPriority, NotificationCategory } from '../types';
+import { NotificationItem, NotificationPlatform, NotificationPriority, NotificationCategory, StockProduct } from '../types';
 
 interface NotificationCardProps {
   key?: any;
   notification: NotificationItem;
+  stockProducts?: StockProduct[];
+  onNavigateToStock?: (searchQuery: string) => void;
   onUpdate: (id: string, updates: Partial<NotificationItem>) => void | Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
 }
 
-export default function NotificationCard({ notification, onUpdate, onDelete }: NotificationCardProps) {
+export default function NotificationCard({ notification, stockProducts = [], onNavigateToStock, onUpdate, onDelete }: NotificationCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [notes, setNotes] = useState(notification.notes || '');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
@@ -142,6 +145,31 @@ export default function NotificationCard({ notification, onUpdate, onDelete }: N
       setIsSavingNotes(false);
     }, 400);
   };
+  // --- STOCK MATCHING LOGIC ---
+  let extractedName = '';
+  if (notification.platform === 'ggmax' && notification.description) {
+    const lines = notification.description.split('\n');
+    const adLine = lines.find(l => l.toLowerCase().includes('anúncio:'));
+    if (adLine && adLine.includes('>')) {
+      let suffix = adLine.split('>').pop() || '';
+      extractedName = suffix.replace(/\*\*$/, '').trim();
+    } else {
+      extractedName = notification.itemName || notification.title;
+    }
+  } else {
+    extractedName = notification.itemName !== 'Produto Desconhecido' ? notification.itemName : notification.title;
+  }
+
+  const cleanSearchTerm = extractedName.replace(/\[.*?\]/g, '').trim().toLowerCase();
+
+  let matchedProduct: StockProduct | null = null;
+  if (stockProducts && stockProducts.length > 0 && cleanSearchTerm.length > 3) {
+    matchedProduct = stockProducts.find(p => {
+      const pName = p.name.toLowerCase();
+      return pName.includes(cleanSearchTerm) || cleanSearchTerm.includes(pName);
+    }) || null;
+  }
+  // -----------------------------
 
   return (
     <motion.div
@@ -151,12 +179,24 @@ export default function NotificationCard({ notification, onUpdate, onDelete }: N
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className={`border rounded-xl p-4 shadow-xs transition-all ${currentPlatform.bgColor} ${
-        notification.status === 'nao_vista' 
-          ? 'ring-2 ring-indigo-500/10 border-indigo-200/80 dark:ring-indigo-500/20 dark:border-indigo-950/60' 
-          : ''
-      }`}
+      className={`border rounded-xl p-4 shadow-xs transition-all ${currentPlatform.bgColor} ${notification.status === 'nao_vista'
+        ? 'ring-2 ring-indigo-500/10 border-indigo-200/80 dark:ring-indigo-500/20 dark:border-indigo-950/60'
+        : ''
+        }`}
     >
+      {/* MATCHED PRODUCT BADGE (Top floating) */}
+      {matchedProduct && onNavigateToStock && (
+        <div className="mb-3">
+          <button
+            onClick={() => onNavigateToStock(matchedProduct.name)}
+            className="flex items-center gap-1.5 text-[11px] font-semibold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 dark:bg-indigo-500/10 dark:border-indigo-500/30 dark:text-indigo-300 dark:hover:bg-indigo-500/20 px-2 py-1 rounded-md transition-colors"
+          >
+            <PackageCheck className="w-3.5 h-3.5" />
+            Conta Estocada: {matchedProduct.name}
+          </button>
+        </div>
+      )}
+
       {/* CARD HEADER / MAIN SUMMARY CONTAINER */}
       <div className="flex items-start justify-between gap-4">
         {/* Left Side: Icon & Key details */}
@@ -169,7 +209,7 @@ export default function NotificationCard({ notification, onUpdate, onDelete }: N
               <span className={`text-xs px-2 py-0.5 font-semibold rounded-md border ${currentPlatform.badgeColor}`}>
                 {currentPlatform.name}
               </span>
-              
+
               <span className={`flex items-center text-[11px] px-1.5 py-0.5 font-medium rounded-md border ${currentPriority.color}`}>
                 {currentPriority.icon}
                 {currentPriority.label}
@@ -214,11 +254,10 @@ export default function NotificationCard({ notification, onUpdate, onDelete }: N
           <button
             id={`btn-toggle-view-${notification.id}`}
             onClick={() => onUpdate(notification.id, { status: notification.status === 'nao_vista' ? 'vista' : 'nao_vista' })}
-            className={`p-1.5 rounded-lg border transition-colors ${
-              notification.status === 'nao_vista'
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-900 dark:text-indigo-400'
-                : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:border-slate-700'
-            }`}
+            className={`p-1.5 rounded-lg border transition-colors ${notification.status === 'nao_vista'
+              ? 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:border-indigo-900 dark:text-indigo-400'
+              : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:border-slate-700'
+              }`}
             title={notification.status === 'nao_vista' ? 'Marcar como Vista' : 'Marcar como Não Vista'}
           >
             {notification.status === 'nao_vista' ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -229,11 +268,10 @@ export default function NotificationCard({ notification, onUpdate, onDelete }: N
             <button
               id={`btn-toggle-resolve-${notification.id}`}
               onClick={() => onUpdate(notification.id, { resolution: notification.resolution === 'pendente' ? 'resolvida' : 'pendente' })}
-              className={`p-1.5 rounded-lg border transition-all text-xs font-semibold px-2.5 ${
-                notification.resolution === 'pendente'
-                  ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900'
-              }`}
+              className={`p-1.5 rounded-lg border transition-all text-xs font-semibold px-2.5 ${notification.resolution === 'pendente'
+                ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900'
+                }`}
             >
               {notification.resolution === 'pendente' ? 'Pendente' : 'Resolvida'}
             </button>
@@ -267,7 +305,7 @@ export default function NotificationCard({ notification, onUpdate, onDelete }: N
                 <div className="p-3 bg-white/70 dark:bg-slate-800/60 rounded-lg border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto font-sans">
                   {notification.description}
                 </div>
-                
+
                 {/* External Links */}
                 <div className="flex gap-2 pt-1">
                   {notification.discordLink && (
