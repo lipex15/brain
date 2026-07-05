@@ -878,6 +878,55 @@ export default function SettingsPanel({
                 )}
               </div>
 
+              {/* AUTO UPDATER SECTION */}
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900/10 space-y-3.5">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-150 flex items-center gap-1.5">
+                  <Monitor className="w-4 h-4 text-indigo-500" />
+                  Sistema de Atualização Automática
+                </h4>
+                <p className="text-[11.5px] text-slate-450 dark:text-slate-450 leading-relaxed font-medium">
+                  Seu aplicativo recebe atualizações automáticas via GitHub silenciosamente. Se você desligou o Rascunho na nuvem, pode forçar a procura imediata de novos recursos por aqui.
+                </p>
+
+                <div className="flex flex-wrap gap-2.5 items-center">
+                  <button
+                    id="btn-updater-check"
+                    type="button"
+                    disabled={systemStatus.updater?.status === 'checking' || systemStatus.updater?.status === 'downloading'}
+                    onClick={() => {
+                      fetch('/api/system/updater-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'check' }) });
+                    }}
+                    className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 hover:scale-[1.01] active:scale-[0.99] cursor-pointer disabled:opacity-50"
+                  >
+                    {systemStatus.updater?.status === 'checking' ? (
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent flex-none rounded-full animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                    Procurar Atualizações (Nuvem)
+                  </button>
+
+                  <button
+                    id="btn-updater-install"
+                    type="button"
+                    disabled={systemStatus.updater?.status !== 'ready'}
+                    onClick={() => {
+                      fetch('/api/system/updater-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'install' }) });
+                    }}
+                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${systemStatus.updater?.status === 'ready' ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs' : 'bg-slate-50 dark:bg-slate-850 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-800'}`}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Reiniciar e Instalar Pronta
+                  </button>
+
+                  {systemStatus.updater && systemStatus.updater.status !== 'none' && (
+                    <span className="text-[10px] uppercase font-bold text-slate-500 ml-auto">
+                      Estado Atual: <span className="text-indigo-400">{systemStatus.updater.status}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {/* DISK MIGRATION SECTION */}
               <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900/10 space-y-3">
                 <h4 className="text-xs font-bold text-slate-900 dark:text-slate-150">Trocar Pasta de Banco de Dados de Disco (HD/SSD)</h4>
@@ -920,116 +969,123 @@ export default function SettingsPanel({
               </div>
             </div>
           </div>
-        )}
+        )
+        }
 
         {/* TAB 4: WINDOWS OFFLINE BUILD GUIDE */}
-        {activeTab === 'guia' && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Monitor className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                Compilando em Windows (.EXE) Sem Node.js Externo
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Como empacotar e instalar este projeto localmente em seu PC Windows de forma rápida e standalone.
-              </p>
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 text-xs text-slate-700 dark:text-slate-300">
-              <div className="space-y-1.5">
-                <h4 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 text-center font-bold flex items-center justify-center text-xs">1</span>
-                  Passo 1: Baixar e Extrair o ZIP do Projeto
-                </h4>
-                <p className="pl-6 text-[11px] text-slate-500">
-                  Clique no menu superior do AI Studio em <strong className="font-semibold text-slate-700 dark:text-slate-200">Exportar (Download ZIP)</strong> ou envie para um repositório GitHub para baixar. Extraia os arquivos em uma pasta de trabalho local em seu computador (Ex: <code className="font-mono bg-white dark:bg-slate-900 px-1 py-0.5 border rounded">C:\Projetos\deathstuffs-brain</code>).
+        {
+          activeTab === 'guia' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Monitor className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  Compilando em Windows (.EXE) Sem Node.js Externo
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Como empacotar e instalar este projeto localmente em seu PC Windows de forma rápida e standalone.
                 </p>
               </div>
 
-              <div className="space-y-1.5">
-                <h4 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 text-center font-bold flex items-center justify-center text-xs">2</span>
-                  Passo 2: Executar a Instalação das dependências e Electron
-                </h4>
-                <p className="pl-6 text-[11px] text-slate-500">
-                  Abra o Prompt de Comando (CMD) ou PowerShell na pasta do projeto e execute os seguintes comandos para instalar as ferramentas locais:
-                </p>
-                <div className="pl-6">
-                  <pre className="font-mono text-[10px] p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                    npm install && npm install -D electron electron-builder wait-on concurrently
-                  </pre>
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 text-xs text-slate-700 dark:text-slate-300">
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 text-center font-bold flex items-center justify-center text-xs">1</span>
+                    Passo 1: Baixar e Extrair o ZIP do Projeto
+                  </h4>
+                  <p className="pl-6 text-[11px] text-slate-500">
+                    Clique no menu superior do AI Studio em <strong className="font-semibold text-slate-700 dark:text-slate-200">Exportar (Download ZIP)</strong> ou envie para um repositório GitHub para baixar. Extraia os arquivos em uma pasta de trabalho local em seu computador (Ex: <code className="font-mono bg-white dark:bg-slate-900 px-1 py-0.5 border rounded">C:\Projetos\deathstuffs-brain</code>).
+                  </p>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <h4 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 text-center font-bold flex items-center justify-center text-xs">3</span>
-                  Passo 3: Empacotar e Compilar para Windows (.EXE)
-                </h4>
-                <p className="pl-6 text-[11px] text-slate-500">
-                  Para compilar o servidor Express, compilar a interface React e gerar o instalador do Windows sem precisar que seus usuários tenham Node.js instalado, execute o comando:
-                </p>
-                <div className="pl-6">
-                  <pre className="font-mono text-[10px] p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-                    npm run electron-pack
-                  </pre>
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 text-center font-bold flex items-center justify-center text-xs">2</span>
+                    Passo 2: Executar a Instalação das dependências e Electron
+                  </h4>
+                  <p className="pl-6 text-[11px] text-slate-500">
+                    Abra o Prompt de Comando (CMD) ou PowerShell na pasta do projeto e execute os seguintes comandos para instalar as ferramentas locais:
+                  </p>
+                  <div className="pl-6">
+                    <pre className="font-mono text-[10px] p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+                      npm install && npm install -D electron electron-builder wait-on concurrently
+                    </pre>
+                  </div>
                 </div>
-                <p className="pl-6 text-[11px] text-slate-500">
-                  O instalador final <strong className="font-semibold text-slate-700 dark:text-slate-200">deathstuffs-brain Setup.exe</strong> será criado dentro da pasta recém-gerada <code className="font-mono bg-white dark:bg-slate-900 px-1 py-0.5 border rounded">/dist/installers</code>. Prontinho para instalar em qualquer computador Windows offline!
-                </p>
-              </div>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
-                <p className="text-[11px] font-bold text-slate-900 dark:text-slate-100">Pasta de dados de salvamento do Windows:</p>
-                <div className="flex flex-col md:flex-row gap-2 md:items-center">
-                  <span className="font-mono text-[10px] px-2 py-1.5 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-slate-500 break-all flex-1">
-                    {systemStatus.storagePath}
-                  </span>
-                  <div className="text-xs font-semibold text-slate-400 px-1 italic">
-                    Dados salvos localmente
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400 text-center font-bold flex items-center justify-center text-xs">3</span>
+                    Passo 3: Empacotar e Compilar para Windows (.EXE)
+                  </h4>
+                  <p className="pl-6 text-[11px] text-slate-500">
+                    Para compilar o servidor Express, compilar a interface React e gerar o instalador do Windows sem precisar que seus usuários tenham Node.js instalado, execute o comando:
+                  </p>
+                  <div className="pl-6">
+                    <pre className="font-mono text-[10px] p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+                      npm run electron-pack
+                    </pre>
+                  </div>
+                  <p className="pl-6 text-[11px] text-slate-500">
+                    O instalador final <strong className="font-semibold text-slate-700 dark:text-slate-200">deathstuffs-brain Setup.exe</strong> será criado dentro da pasta recém-gerada <code className="font-mono bg-white dark:bg-slate-900 px-1 py-0.5 border rounded">/dist/installers</code>. Prontinho para instalar em qualquer computador Windows offline!
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                  <p className="text-[11px] font-bold text-slate-900 dark:text-slate-100">Pasta de dados de salvamento do Windows:</p>
+                  <div className="flex flex-col md:flex-row gap-2 md:items-center">
+                    <span className="font-mono text-[10px] px-2 py-1.5 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-slate-500 break-all flex-1">
+                      {systemStatus.storagePath}
+                    </span>
+                    <div className="text-xs font-semibold text-slate-400 px-1 italic">
+                      Dados salvos localmente
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* SAVE & SUBMIT GLOBAL FOOTER ACTIONS */}
-        {activeTab !== 'guia' && (
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-end gap-3">
-            <button
-              id="btn-reset-settings"
-              type="button"
-              onClick={onReset}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors inline-flex items-center gap-1.5"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Resetar para Padrão
-            </button>
+        {
+          activeTab !== 'guia' && (
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-end gap-3">
+              <button
+                id="btn-reset-settings"
+                type="button"
+                onClick={onReset}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors inline-flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Resetar para Padrão
+              </button>
 
-            <button
-              id="btn-save-settings-submit"
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700 rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
-            >
-              {isSaving ? (
-                <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              Salvar Configurações
-            </button>
-          </div>
-        )}
+              <button
+                id="btn-save-settings-submit"
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2 text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-700 rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Salvar Configurações
+              </button>
+            </div>
+          )
+        }
 
-        {saveResult && (
-          <div className={`p-3 rounded-lg flex items-start gap-2 text-xs ${saveResult.type === 'success' ? 'bg-emerald-50 border border-emerald-150 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-400' : 'bg-rose-50 border border-rose-150 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-400'}`}>
-            {saveResult.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-            <span>{saveResult.message}</span>
-          </div>
-        )}
-      </form>
-    </div>
+        {
+          saveResult && (
+            <div className={`p-3 rounded-lg flex items-start gap-2 text-xs ${saveResult.type === 'success' ? 'bg-emerald-50 border border-emerald-150 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-400' : 'bg-rose-50 border border-rose-150 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-400'}`}>
+              {saveResult.type === 'success' ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+              <span>{saveResult.message}</span>
+            </div>
+          )
+        }
+      </form >
+    </div >
   );
 }

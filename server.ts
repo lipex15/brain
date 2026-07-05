@@ -165,6 +165,13 @@ function broadcastEvent(type: string, data: any) {
   sseClients.forEach((client) => client.write(messageStr));
 }
 
+// Receive IPC messages from Electron main process (autoUpdater)
+process.on('message', (msg: any) => {
+  if (msg && msg.type === 'updater_state') {
+    broadcastEvent('updater_state', msg.data);
+  }
+});
+
 // NOTE: Auto-delivery is intentionally DISABLED.
 // Notifications and stock are independent systems — stock management is fully manual.
 // This function only forwards the notification to WhatsApp when applicable.
@@ -1497,6 +1504,16 @@ app.post("/api/stock/products/:productId/deliver-manual", async (req, res) => {
     res.json({ success: true, item });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/system/updater-action", (req, res) => {
+  const { action } = req.body;
+  if (process.send) {
+    process.send({ type: 'updater_action', action });
+    res.json({ success: true, message: `Acionado comando: ${action}` });
+  } else {
+    res.json({ success: false, message: "Modo standalone (sem Electron IPC ativo)." });
   }
 });
 

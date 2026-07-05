@@ -31,7 +31,9 @@ import {
   FileText,
   Sun,
   Moon,
-  Bot
+  Bot,
+  CheckCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 const DeathstuffsLogo = () => (
@@ -102,6 +104,7 @@ export default function App() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     discord: { connected: false, botUser: null, statusText: 'Desconectado' },
     whatsapp: { status: 'desconectado', qrCode: null, statusText: 'Desconectado' },
+    updater: { status: 'none', progress: 0 },
     storagePath: ''
   });
   const [logs, setLogs] = useState<LiveLog[]>([]);
@@ -221,6 +224,8 @@ export default function App() {
           setSystemStatus((prev) => ({ ...prev, discord: data }));
         } else if (type === 'status_whatsapp') {
           setSystemStatus((prev) => ({ ...prev, whatsapp: data }));
+        } else if (type === 'updater_state') {
+          setSystemStatus((prev) => ({ ...prev, updater: data }));
         } else if (type === 'notifications_refresh') {
           setNotifications(data);
         } else if (type === 'stock_refresh') {
@@ -529,6 +534,68 @@ export default function App() {
       {/* Background overlay if image is set, to ensure text legibility */}
       {settings.general.backgroundImage && (
         <div className="absolute inset-0 bg-white/70 dark:bg-slate-950/80 backdrop-blur-sm z-0 pointer-events-none" />
+      )}
+
+      {/* 0. UPDATER BANNER */}
+      {systemStatus.updater && systemStatus.updater.status !== 'none' && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-4 duration-300 w-[95%] max-w-lg">
+          <div className="bg-slate-900/95 backdrop-blur-lg border border-slate-700/50 shadow-2xl rounded-2xl p-4 flex items-center space-x-4">
+            {systemStatus.updater.status === 'downloading' ? (
+              <>
+                <div className="relative flex-none">
+                  <div className="w-10 h-10 border-2 border-indigo-500/20 rounded-full"></div>
+                  <div className="w-10 h-10 border-2 border-indigo-500 rounded-full border-t-transparent animate-spin absolute inset-0"></div>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-[9px] font-bold text-indigo-400">{Math.round(systemStatus.updater.progress || 0)}%</span>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-slate-100 font-bold text-sm tracking-tight truncate">Baixando Atualização...</p>
+                  <div className="flex justify-between items-center mt-1.5 mb-1">
+                    <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">Progresso</span>
+                    {systemStatus.updater.bytesPerSecond && (
+                      <span className="text-[10px] font-mono text-slate-400">{(systemStatus.updater.bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s</span>
+                    )}
+                  </div>
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-indigo-400 h-1.5 rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.round(systemStatus.updater.progress || 0)}%` }}></div>
+                  </div>
+                </div>
+              </>
+            ) : systemStatus.updater.status === 'ready' ? (
+              <>
+                <div className="bg-emerald-500/10 p-2 rounded-full text-emerald-400 flex-none border border-emerald-500/20">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-emerald-400 font-bold text-sm tracking-tight truncate">Atualização Pronta</p>
+                  <p className="text-xs text-slate-400 mt-0.5 leading-tight">Uma nova versão foi baixada. Deseja aplicar agora?</p>
+                </div>
+                <button onClick={() => fetch('/api/system/updater-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'install' }) })} className="ml-2 bg-emerald-500 hover:bg-emerald-600 text-white text-[11px] uppercase tracking-wider font-bold px-4 py-2 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 whitespace-nowrap cursor-pointer">
+                  Reiniciar
+                </button>
+              </>
+            ) : systemStatus.updater.status === 'error' ? (
+              <>
+                <div className="bg-rose-500/10 p-2 rounded-full text-rose-400 flex-none border border-rose-500/20">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-rose-400 font-bold text-sm tracking-tight truncate">Falha na Atualização</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 max-h-8 overflow-hidden">{systemStatus.updater.error || 'Erro desconhecido'}</p>
+                </div>
+                <button onClick={() => fetch('/api/system/updater-action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'check' }) })} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl transition-colors cursor-pointer">
+                  Retentar
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center space-x-3 text-slate-300 w-full justify-center py-1">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs font-bold uppercase tracking-wider">Verificando...</span>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* 1. TOP HEADER NAVIGATION BAR */}

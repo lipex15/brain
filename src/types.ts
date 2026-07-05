@@ -90,6 +90,13 @@ export interface StockInventoryItem {
   warrantyAlertSent?: boolean;
 }
 
+export interface UpdaterState {
+  status: 'none' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
+  progress: number;
+  bytesPerSecond?: number;
+  error?: string;
+}
+
 export interface SystemStatus {
   discord: {
     connected: boolean;
@@ -101,6 +108,7 @@ export interface SystemStatus {
     qrCode: string | null; // Data URL for QR Code image
     statusText: string;
   };
+  updater?: UpdaterState;
   storagePath: string;
 }
 

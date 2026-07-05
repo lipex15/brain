@@ -33,7 +33,8 @@ function startServer() {
   if (isPackaged) {
     const serverPath = path.join(process.resourcesPath, 'app', 'dist', 'server.cjs');
     serverProcess = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, NODE_ENV: 'production', IS_ELECTRON: 'true', ELECTRON_RUN_AS_NODE: '1' }
+      env: { ...process.env, NODE_ENV: 'production', IS_ELECTRON: 'true', ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
 
     serverProcess.stdout.on('data', (data) => {
@@ -151,6 +152,55 @@ app.whenReady().then(() => {
         warn: (msg) => require('fs').appendFileSync('C:\\Users\\felip\\Desktop\\error.log', `[AUTOUPDATER WARN] ${msg}\n`),
         error: (msg) => require('fs').appendFileSync('C:\\Users\\felip\\Desktop\\error.log', `[AUTOUPDATER ERROR] ${msg}\n`)
       };
+
+      autoUpdater.autoDownload = true;
+      autoUpdater.autoInstallOnAppQuit = true;
+
+      // Event Listeners for the IPC bridge
+      autoUpdater.on('checking-for-update', () => {
+        if (serverProcess) serverProcess.send({ type: 'updater_state', data: { status: 'checking', progress: 0 } });
+      });
+
+      autoUpdater.on('update-available', (info) => {
+        if (serverProcess) serverProcess.send({ type: 'updater_state', data: { status: 'available', progress: 0 } });
+      });
+
+      autoUpdater.on('update-not-available', (info) => {
+        if (serverProcess) serverProcess.send({ type: 'updater_state', data: { status: 'none', progress: 0 } });
+      });
+
+      autoUpdater.on('error', (err) => {
+        if (serverProcess) serverProcess.send({ type: 'updater_state', data: { status: 'error', progress: 0, error: err.message } });
+        require('fs').appendFileSync('C:\\Users\\felip\\Desktop\\error.log', `[AUTOUPDATER EMIT ERROR] ${err.message}\n`);
+      });
+
+      autoUpdater.on('download-progress', (progressObj) => {
+        if (serverProcess) serverProcess.send({
+          type: 'updater_state', data: {
+            status: 'downloading',
+            progress: progressObj.percent,
+            bytesPerSecond: progressObj.bytesPerSecond
+          }
+        });
+      });
+
+      autoUpdater.on('update-downloaded', (info) => {
+        if (serverProcess) serverProcess.send({ type: 'updater_state', data: { status: 'ready', progress: 100 } });
+      });
+
+      // IPC listener to receive commands from React via Express
+      if (serverProcess) {
+        serverProcess.on('message', (msg) => {
+          if (msg && msg.type === 'updater_action') {
+            if (msg.action === 'check') {
+              autoUpdater.checkForUpdatesAndNotify().catch(e => console.error(e));
+            } else if (msg.action === 'install') {
+              autoUpdater.quitAndInstall(false, true);
+            }
+          }
+        });
+      }
+
       autoUpdater.checkForUpdatesAndNotify().catch(err => {
         require('fs').appendFileSync('C:\\Users\\felip\\Desktop\\error.log', `[AUTOUPDATER FATAL] ${err.message}\n`);
       });
