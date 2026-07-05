@@ -782,14 +782,22 @@ export default function SettingsPanel({
                       type="file"
                       accept="image/*,video/mp4"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const localPath = (file as any).path;
-                          if (localPath) {
-                            // Convert backslashes to forward slashes for cross-platform compatibility in URLs
-                            const sanitizedPath = localPath.replace(/\\/g, '/');
-                            setSettings({ ...settings, general: { ...settings.general, backgroundImage: `file:///${sanitizedPath}` } });
+                          try {
+                            const formData = new FormData();
+                            formData.append('bg', file);
+                            const res = await fetch('http://localhost:3000/api/upload-bg', {
+                              method: 'POST',
+                              body: formData
+                            });
+                            const data = await res.json();
+                            if (data.url) {
+                              setSettings({ ...settings, general: { ...settings.general, backgroundImage: data.url } });
+                            }
+                          } catch (err) {
+                            console.error("Falha ao subir imagem", err);
                           }
                         }
                       }}
