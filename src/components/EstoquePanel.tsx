@@ -612,10 +612,10 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                                   <button
                                                     type="button"
                                                     onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                                                    className="text-slate-400 hover:text-indigo-600 transition-colors p-0.5"
+                                                    className={`transition-colors p-1.5 rounded-md ${isExpanded ? 'bg-indigo-500 text-white shadow-md' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'}`}
                                                     title="Expandir detalhes da conta"
                                                   >
-                                                    <Eye className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'scale-110 text-indigo-500' : ''}`} />
+                                                    <Eye className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isExpanded ? 'scale-110' : ''}`} />
                                                   </button>
                                                 </td>
 
@@ -685,7 +685,7 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                                         className="px-2 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-[10px] font-bold rounded-md cursor-pointer transition-all border border-indigo-150 dark:border-indigo-900/30"
                                                         title="Marcar como entregue / Vendido"
                                                       >
-                                                        Resgatar / Vender
+                                                        Marcar como Vendido
                                                       </button>
                                                     )}
                                                     <button

@@ -24,7 +24,7 @@ export interface AppSettings {
     startup: boolean;
     soundEnabled: boolean;
     browserAlerts: boolean;
-    theme: 'claro' | 'escuro';
+    theme: 'claro' | 'escuro' | 'preto';
 
   };
 }

@@ -49,7 +49,7 @@ async function upload() {
     const stream = fs.createReadStream(exePath);
 
     // Note: undici fetch in recent node supports passing ReadStream as body for large files
-    const res = await fetch(`${uploadUrl}?name=${fileName}`, {
+    const res = await fetch(`${uploadUrl}?name=${encodeURIComponent(fileName)}`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,

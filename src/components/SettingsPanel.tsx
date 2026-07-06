@@ -750,7 +750,7 @@ export default function SettingsPanel({
                       : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700 dark:bg-slate-900/20'
                       }`}
                   >
-                    ☀️ Tema Claro
+                    ☀️ Claro
                   </button>
                   <button
                     id="btn-theme-escuro"
@@ -761,7 +761,18 @@ export default function SettingsPanel({
                       : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700 dark:bg-slate-900/20'
                       }`}
                   >
-                    🌙 Tema Escuro
+                    🌙 Escuro
+                  </button>
+                  <button
+                    id="btn-theme-preto"
+                    type="button"
+                    onClick={() => setSettings({ ...settings, general: { ...settings.general, theme: 'preto' } })}
+                    className={`text-xs font-semibold flex-1 py-2 rounded-lg border transition-all ${settings.general.theme === 'preto'
+                      ? 'bg-black text-white border-slate-700 ring-2 ring-slate-500/20 shadow-xs dark:bg-black'
+                      : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700 dark:bg-slate-900/20'
+                      }`}
+                  >
+                    ⬛ Preto
                   </button>
                 </div>
               </div>

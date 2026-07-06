@@ -1,3 +1,28 @@
 @import "tailwindcss";
 
 @variant dark (&:where(.dark, .dark *));
+
+html.theme-preto body {
+  background-color: #000000 !important;
+}
+html.theme-preto .dark\:bg-slate-950 {
+  background-color: #000000 !important;
+}
+html.theme-preto .dark\:bg-slate-900 {
+  background-color: #050505 !important;
+}
+html.theme-preto .dark\:bg-slate-800 {
+  background-color: #111111 !important;
+  border-color: #222222 !important;
+}
+html.theme-preto header,
+html.theme-preto .dark\:bg-slate-900\/95,
+html.theme-preto .bg-slate-900\/95 {
+  background-color: rgba(0, 0, 0, 0.95) !important;
+  border-bottom-color: #111111 !important;
+}
+html.theme-preto .dark\:border-slate-800\/80,
+html.theme-preto .dark\:border-slate-800,
+html.theme-preto .dark\:border-slate-700 {
+  border-color: #1a1a1a !important;
+}

@@ -296,10 +296,12 @@ export default function App() {
   // Handle visual themes (Dark / Light)
   useEffect(() => {
     const root = window.document.documentElement;
+    root.classList.remove('dark', 'theme-preto');
+
     if (settings.general.theme === 'escuro') {
       root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+    } else if (settings.general.theme === 'preto') {
+      root.classList.add('dark', 'theme-preto');
     }
   }, [settings.general.theme]);
 
@@ -726,19 +728,26 @@ export default function App() {
           <button
             id="btn-quick-theme-toggle"
             onClick={() => {
-              const nextTheme = settings.general.theme === 'escuro' ? 'claro' : 'escuro';
+              const currentTheme = settings.general.theme;
+              let nextTheme: 'claro' | 'escuro' | 'preto' = 'claro';
+              if (currentTheme === 'claro') nextTheme = 'escuro';
+              else if (currentTheme === 'escuro') nextTheme = 'preto';
+              else if (currentTheme === 'preto') nextTheme = 'claro';
+
               handleSaveSettings({
                 ...settings,
                 general: { ...settings.general, theme: nextTheme }
               });
             }}
             className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-white dark:bg-slate-900 shadow-2xs transition-all cursor-pointer"
-            title={settings.general.theme === 'escuro' ? "Ativar Modo Claro" : "Ativar Modo Noturno"}
+            title={settings.general.theme === 'claro' ? "Ativar Escuro" : settings.general.theme === 'escuro' ? "Ativar All Black" : "Ativar Claro"}
           >
-            {settings.general.theme === 'escuro' ? (
+            {settings.general.theme === 'claro' ? (
               <Sun className="w-4 h-4 text-amber-500" />
-            ) : (
+            ) : settings.general.theme === 'escuro' ? (
               <Moon className="w-4 h-4 text-indigo-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-slate-300" fill="currentColor" />
             )}
           </button>
 
