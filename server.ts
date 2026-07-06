@@ -45,6 +45,38 @@ app.get('/api/local-image', (req, res) => {
 app.use(cors());
 app.use(express.json());
 
+// --- CUSTOM BACKGROUND UPLOAD UTLITY ---
+// Ensure STORAGE_DIR is available or retrieve it
+function getStoragePathTemp() {
+  const isElectron = !!process.versions.electron || process.env.IS_ELECTRON === 'true';
+  const defaultBaseDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
+  const sDir = path.join(defaultBaseDir, "deathstuffs-brain");
+  if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
+  return sDir;
+}
+
+const storageOpts = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Save to the data directory to persist
+    const dir = typeof getStorageFolder === 'function' ? getStorageFolder() : getStoragePathTemp();
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `bg_custom_${Date.now()}${ext}`);
+  }
+});
+const upload = multer({ storage: storageOpts });
+
+app.post('/api/upload-bg', upload.single('bg'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  const localPath = req.file.path.replace(/\\/g, '/');
+  const url = `http://localhost:${PORT}/api/local-image?path=${encodeURIComponent(localPath)}`;
+  res.json({ url });
+});
+
 // --- 1. DYNAMIC STORAGE PATHS ---
 function getStorageFolder(): string {
   const isElectron = !!process.versions.electron || process.env.IS_ELECTRON === 'true';

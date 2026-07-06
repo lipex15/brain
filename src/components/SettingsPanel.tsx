@@ -26,7 +26,8 @@ import {
   RefreshCw,
   Search,
   Image,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 import { AppSettings, SystemStatus } from '../types';
 
@@ -819,25 +820,16 @@ export default function SettingsPanel({
                     </button>
                   </div>
 
-                  <div className="flex-1 w-full relative">
-                    <input
-                      id="input-background-image"
-                      type="text"
-                      value={settings.general.backgroundImage || ''}
-                      onChange={(e) => setSettings({ ...settings, general: { ...settings.general, backgroundImage: e.target.value } })}
-                      placeholder="Ou cole URL..."
-                      className="w-full text-xs p-2.5 pl-3 pr-8 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-slate-900/40 dark:text-slate-200"
-                    />
-                    {settings.general.backgroundImage && (
-                      <button
-                        type="button"
-                        onClick={() => setSettings({ ...settings, general: { ...settings.general, backgroundImage: '' } })}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  {settings.general.backgroundImage && (
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, general: { ...settings.general, backgroundImage: '' } })}
+                      className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs font-bold transition-all hover:bg-rose-100 dark:hover:bg-rose-900/50 cursor-pointer shadow-sm"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Remover Fundo
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -544,7 +544,12 @@ export default function App() {
     <div
       className="min-h-screen font-sans antialiased text-slate-800 dark:text-slate-100 flex flex-col transition-colors relative"
       style={{
-        backgroundColor: settings.general.theme === 'escuro' ? '#020617' : settings.general.theme === 'preto' ? '#000000' : '#f8fafc'
+        backgroundColor: settings.general.theme === 'escuro' ? '#020617' : settings.general.theme === 'preto' ? '#000000' : '#f8fafc',
+        backgroundImage: settings.general.backgroundImage ? `url("${settings.general.backgroundImage}")` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
       }}
     >
 
