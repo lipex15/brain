@@ -12,3 +12,4 @@ dist-electron/
 .wwebjs_cache/
 app_log.txt
 error.log
+publish.bat

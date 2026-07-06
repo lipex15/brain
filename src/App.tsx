@@ -544,7 +544,7 @@ export default function App() {
     <div
       className="min-h-screen font-sans antialiased text-slate-800 dark:text-slate-100 flex flex-col transition-colors relative"
       style={{
-        backgroundColor: settings.general.theme === 'escuro' ? '#020617' : '#f8fafc'
+        backgroundColor: settings.general.theme === 'escuro' ? '#020617' : settings.general.theme === 'preto' ? '#000000' : '#f8fafc'
       }}
     >
 
