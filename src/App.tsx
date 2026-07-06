@@ -545,22 +545,7 @@ export default function App() {
         backgroundColor: settings.general.theme === 'escuro' ? '#020617' : '#f8fafc'
       }}
     >
-      <div
-        className={`fixed inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 pointer-events-none ${settings.general.backgroundImage ? 'opacity-100' : 'opacity-0'
-          }`}
-        style={{
-          backgroundImage: settings.general.backgroundImage
-            ? (settings.general.backgroundImage.startsWith('file:///')
-              ? `url(http://localhost:3000/api/local-image?path=${encodeURIComponent(settings.general.backgroundImage)})`
-              : `url(${settings.general.backgroundImage})`)
-            : 'none',
-        }}
-      />
 
-      {/* Background overlay if image is set, to ensure text legibility */}
-      {settings.general.backgroundImage && (
-        <div className="absolute inset-0 bg-white/70 dark:bg-slate-950/80 backdrop-blur-sm z-0 pointer-events-none" />
-      )}
 
       {/* 0. UPDATER BANNER */}
       {systemStatus.updater && systemStatus.updater.status !== 'none' && (
@@ -659,7 +644,7 @@ export default function App() {
         <nav className="hidden md:flex items-center gap-1.5">
           <button
             id="nav-painel"
-            onClick={() => setActiveTab('painel')}
+            onClick={() => { setActiveTab('painel'); setGlobalStockSearch(''); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'painel'
               ? 'bg-slate-900 text-white dark:bg-indigo-600 dark:text-white'
               : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'
@@ -670,7 +655,7 @@ export default function App() {
 
           <button
             id="nav-estoque"
-            onClick={() => setActiveTab('estoque')}
+            onClick={() => { setActiveTab('estoque'); setGlobalStockSearch(''); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === 'estoque'
               ? 'bg-slate-900 text-white dark:bg-indigo-600 dark:text-white'
               : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'
@@ -681,7 +666,7 @@ export default function App() {
 
           <button
             id="nav-config"
-            onClick={() => setActiveTab('config')}
+            onClick={() => { setActiveTab('config'); setGlobalStockSearch(''); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === 'config'
               ? 'bg-slate-900 text-white dark:bg-indigo-600 dark:text-white'
               : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'
@@ -692,7 +677,7 @@ export default function App() {
 
           <button
             id="nav-logs"
-            onClick={() => setActiveTab('logs')}
+            onClick={() => { setActiveTab('logs'); setGlobalStockSearch(''); }}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === 'logs'
               ? 'bg-slate-900 text-white dark:bg-indigo-600 dark:text-white'
               : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'
@@ -798,20 +783,21 @@ export default function App() {
               { id: 'estoque', label: 'Estoque de Contas' },
               { id: 'config', label: 'Configurações' },
               { id: 'logs', label: 'Histórico de Logs' }
-            ].map((tab) => (
+            ].map((item) => (
               <button
-                id={`btn-mobile-tab-${tab.id}`}
-                key={tab.id}
+                id={`btn-mobile-tab-${item.id}`}
+                key={item.id}
                 onClick={() => {
-                  setActiveTab(tab.id as any);
+                  setActiveTab(item.id as any);
+                  setGlobalStockSearch('');
                   setMobileMenuOpen(false);
                 }}
-                className={`py-2.5 text-left text-xs font-semibold px-2 rounded-lg transition-colors ${activeTab === tab.id
+                className={`py-2.5 text-left text-xs font-semibold px-2 rounded-lg transition-colors ${activeTab === item.id
                   ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
                   : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-850'
                   }`}
               >
-                {tab.label}
+                {item.label}
               </button>
             ))}
           </motion.div>

@@ -195,7 +195,7 @@ app.whenReady().then(() => {
             if (msg.action === 'check') {
               autoUpdater.checkForUpdatesAndNotify().catch(e => console.error(e));
             } else if (msg.action === 'install') {
-              autoUpdater.quitAndInstall(false, true);
+              autoUpdater.quitAndInstall(true, true);
             }
           }
         });

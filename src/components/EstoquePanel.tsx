@@ -61,7 +61,7 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
   }, [forceWarrantyFilter]);
 
   useEffect(() => {
-    if (globalSearchQuery) {
+    if (globalSearchQuery !== undefined) {
       setSearchQuery(globalSearchQuery);
     }
   }, [globalSearchQuery]);

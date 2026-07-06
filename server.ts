@@ -92,29 +92,7 @@ let SETTINGS_FILE = path.join(STORAGE_DIR, "settings.json");
 let NOTIFICATIONS_FILE = path.join(STORAGE_DIR, "notifications.json");
 let NOTIFICATIONS_BACKUP = path.join(STORAGE_DIR, "notifications.json.bak");
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(STORAGE_DIR, 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname) || '';
-    cb(null, 'bg-' + uniqueSuffix + ext);
-  }
-});
-const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } });
 
-app.post('/api/upload-bg', upload.single('bg'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'Nenhum arquivo recebido.' });
-  }
-  const absolutePath = req.file.path.replace(/\\/g, '/');
-  res.json({ url: `file:///${absolutePath}` });
-});
 
 // Initialize default empty databases if not present
 if (!fs.existsSync(SETTINGS_FILE)) {
