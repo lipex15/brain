@@ -79,6 +79,10 @@ import EstoquePanel from './components/EstoquePanel';
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<'painel' | 'config' | 'logs' | 'estoque'>('painel');
+  const [settingsTabRequest, setSettingsTabRequest] = useState<{
+    tab: 'discord' | 'whatsapp' | 'geral' | 'lembretes' | 'dados' | 'guia';
+    key: number;
+  }>({ tab: 'discord', key: 0 });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Logo / Photo detection
@@ -144,6 +148,13 @@ export default function App() {
   // Global Stock Cache for Notification Matching
   const [stockProducts, setStockProducts] = useState<any[]>([]);
   const [globalStockSearch, setGlobalStockSearch] = useState<string>('');
+
+  const openSettingsTab = (tab: 'discord' | 'whatsapp' | 'geral' | 'lembretes' | 'dados' | 'guia') => {
+    setSettingsTabRequest({ tab, key: Date.now() });
+    setActiveTab('config');
+    setGlobalStockSearch('');
+    setMobileMenuOpen(false);
+  };
 
   // --- AUDIO SYNTHESIS ENGINE ---
   // Uses Web Audio API to create distinct offline alert signatures.
@@ -545,7 +556,11 @@ export default function App() {
     try {
       await handleSaveSettings(draftSettings);
       const res = await fetch('/api/whatsapp/test', { method: 'POST' });
-      return await res.json();
+      const result = await res.json();
+      fetchSystemStatus();
+      setTimeout(fetchSystemStatus, 1500);
+      setTimeout(fetchSystemStatus, 5000);
+      return result;
     } catch (e) {
       return { success: false, message: 'Erro ao se conectar com o servidor local.' };
     }
@@ -555,7 +570,9 @@ export default function App() {
     try {
       await fetch('/api/whatsapp/disconnect', { method: 'POST' });
       // Wait slightly then fetch new status (to show qr again in waiting mode)
+      fetchSystemStatus();
       setTimeout(fetchSystemStatus, 1500);
+      setTimeout(fetchSystemStatus, 5000);
     } catch (e) {
       console.error('Falha ao desconectar WhatsApp', e);
     }
@@ -830,7 +847,7 @@ export default function App() {
 
           <button
             id="nav-config"
-            onClick={() => { setActiveTab('config'); setGlobalStockSearch(''); }}
+            onClick={() => openSettingsTab('discord')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === 'config'
               ? 'bg-slate-900 text-white dark:bg-indigo-600 dark:text-white'
               : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'
@@ -886,15 +903,15 @@ export default function App() {
             )}
           </div>
 
-          {/* Quick reminder creator */}
+          {/* Quick reminders shortcut */}
           <button
-            id="btn-open-reminder-composer"
-            onClick={() => setShowReminderComposer(true)}
+            id="btn-open-reminders-settings"
+            onClick={() => openSettingsTab('lembretes')}
             className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 shadow-2xs transition-all cursor-pointer"
-            title="Cadastrar lembrete"
+            title="Ver lembretes"
           >
             <FileText className="w-4 h-4" />
-            <span className="hidden xl:inline text-[10px] font-black uppercase tracking-wider">Cadastrar lembrete</span>
+            <span className="hidden xl:inline text-[10px] font-black uppercase tracking-wider">Lembretes</span>
           </button>
 
           {/* Quick Theme toggler */}
@@ -970,9 +987,13 @@ export default function App() {
                 id={`btn-mobile-tab-${item.id}`}
                 key={item.id}
                 onClick={() => {
-                  setActiveTab(item.id as any);
-                  setGlobalStockSearch('');
-                  setMobileMenuOpen(false);
+                  if (item.id === 'config') {
+                    openSettingsTab('discord');
+                  } else {
+                    setActiveTab(item.id as any);
+                    setGlobalStockSearch('');
+                    setMobileMenuOpen(false);
+                  }
                 }}
                 className={`py-2.5 text-left text-xs font-semibold px-2 rounded-lg transition-colors ${activeTab === item.id
                   ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
@@ -1473,6 +1494,8 @@ export default function App() {
               onReset={handleResetSettings}
               onClearDatabase={handleClearDatabase}
               onTriggerScanSim={handleTriggerWhatsAppScanSim}
+              initialTab={settingsTabRequest.tab}
+              tabRequestKey={settingsTabRequest.key}
               reminders={reminders}
               onOpenReminderModal={() => setShowReminderComposer(true)}
               onCompleteReminder={handleCompleteReminder}

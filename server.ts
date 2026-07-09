@@ -882,12 +882,18 @@ function startWhatsAppBot(force = false) {
     whatsappBootId++;
     clearWhatsAppStartupTimer();
     addLog("whatsapp", "error", `Falha ao iniciar core do WhatsApp: ${err.message}`);
+    const failedClient = wpClient;
+    wpClient = null;
+    if (failedClient) {
+      try {
+        failedClient.destroy();
+      } catch (e) { }
+    }
     whatsappStatus = {
       status: 'desconectado',
       qrCode: null,
       statusText: "Falha ao iniciar WhatsApp. Tente reconectar nas configuracoes.",
     };
-    wpClient = null;
     broadcastEvent("status_whatsapp", whatsappStatus);
   });
 }

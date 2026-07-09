@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Lembretes gerais no painel\n- Alertas agendados por conta\n- Sons distintos por tipo de alerta\n- WhatsApp formatado para garantia LZT e alertas`,
+        body: `deathStuffs ${tag}\n\n- Botao de Lembretes abre direto a aba Meus lembretes nas configuracoes\n- Pareamento do WhatsApp ganhou acao clara de Conectar / Reconectar\n- Reconexao limpa sessao quebrada e busca o QR Code novamente`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
