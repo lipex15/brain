@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige janela branca auxiliar enquanto o app fica aberto\n- Janela principal so aparece depois que a interface carregou\n- Chromium do WhatsApp roda em modo headless/offscreen para nao aparecer no desktop`,
+        body: `deathStuffs ${tag}\n\n- Remove janela branca auxiliar no desktop\n- WhatsApp passa a preferir Chromium headless do Puppeteer em vez de Chrome/Edge local\n- Bloqueia janelas secundarias do Electron e mostra a interface so depois de carregada`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

@@ -831,6 +831,22 @@ function getChromeExecutablePath() {
   const fs = require('fs');
   const path = require('path');
 
+  try {
+    const puppeteer = require('puppeteer');
+    const bundledChromePath = puppeteer.executablePath();
+    if (bundledChromePath && fs.existsSync(bundledChromePath)) {
+      console.log(`[WhatsApp] Usando Chromium headless do Puppeteer em: ${bundledChromePath}`);
+      return bundledChromePath;
+    }
+  } catch (e: any) {
+    console.log(`[WhatsApp] Chromium do Puppeteer indisponivel: ${e.message}`);
+  }
+
+  if (process.env.DSB_ALLOW_SYSTEM_BROWSER !== '1') {
+    console.log("[WhatsApp] Navegador local ignorado para evitar janela auxiliar visivel.");
+    return undefined;
+  }
+
   const localAppData = process.env.LOCALAPPDATA || '';
   const programFiles = process.env.PROGRAMFILES || 'C:\\Program Files';
   const programFilesX86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
@@ -922,7 +938,7 @@ function startWhatsAppBot(force = false) {
     authStrategy: new LocalAuth(getWhatsAppAuthOptions()),
     puppeteer: {
       executablePath: getChromeExecutablePath(),
-      headless: 'new' as any,
+      headless: true,
       defaultViewport: { width: 1, height: 1 },
       args: [
         '--headless=new',
