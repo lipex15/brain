@@ -922,15 +922,25 @@ function startWhatsAppBot(force = false) {
     authStrategy: new LocalAuth(getWhatsAppAuthOptions()),
     puppeteer: {
       executablePath: getChromeExecutablePath(),
-      headless: true,
+      headless: 'new' as any,
+      defaultViewport: { width: 1, height: 1 },
       args: [
+        '--headless=new',
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-extensions',
         '--disable-gpu',
         '--disable-dev-shm-usage',
+        '--disable-crash-reporter',
+        '--disable-crashpad',
+        '--disable-background-networking',
+        '--disable-component-update',
+        '--disable-features=Translate,MediaRouter',
         '--no-first-run',
-        '--no-default-browser-check'
+        '--no-default-browser-check',
+        '--start-minimized',
+        '--window-position=-32000,-32000',
+        '--window-size=1,1'
       ],
       env: cleanEnv
     }

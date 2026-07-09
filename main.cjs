@@ -64,6 +64,8 @@ function createWindow() {
     height: 800,
     minWidth: 1000,
     minHeight: 600,
+    show: false,
+    backgroundColor: '#020617',
     title: 'deathstuffs brain v1.0',
     icon: path.join(__dirname, 'assets', 'logo.png'),
     webPreferences: {
@@ -74,6 +76,17 @@ function createWindow() {
 
   // Suppress standard menu bar (File, Edit, View...) on Windows
   mainWindow.setMenu(null);
+
+  mainWindow.once('ready-to-show', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('did-create-window', (childWindow) => {
+    if (childWindow && !childWindow.isDestroyed()) childWindow.close();
+  });
 
   // Custom user agent
   mainWindow.webContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");

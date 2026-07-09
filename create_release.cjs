@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige EBUSY do CrashpadMetrics ao reconectar WhatsApp\n- Encerramento do Chromium agora mata a arvore de processos no Windows\n- Se a sessao antiga ficar bloqueada, o app cria uma sessao nova para gerar o QR Code`,
+        body: `deathStuffs ${tag}\n\n- Corrige janela branca auxiliar enquanto o app fica aberto\n- Janela principal so aparece depois que a interface carregou\n- Chromium do WhatsApp roda em modo headless/offscreen para nao aparecer no desktop`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
