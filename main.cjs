@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const { app, BrowserWindow, Tray, Menu } = require('electron');
+const { app, BrowserWindow, Tray, Menu, dialog, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
@@ -11,6 +11,7 @@ const { autoUpdater } = require('electron-updater');
 let mainWindow;
 let tray;
 let serverProcess;
+let downloadHandlerConfigured = false;
 
 // Prevent multiple instances
 const gotTheLock = app.requestSingleInstanceLock();
@@ -55,6 +56,36 @@ function startServer() {
       require('fs').appendFileSync('C:\\Users\\felip\\Desktop\\error.log', `[EXIT] code: ${code}, signal: ${signal}\n`);
     });
   }
+}
+
+function configureDownloadHandling() {
+  if (downloadHandlerConfigured) return;
+  downloadHandlerConfigured = true;
+
+  session.defaultSession.on('will-download', (event, item) => {
+    const url = item.getURL();
+    const suggestedName = item.getFilename() || `deathStuffs-backup-${Date.now()}.dsb`;
+    const isBackupDownload = url.includes('/api/storage/backup/export') || suggestedName.toLowerCase().endsWith('.dsb');
+
+    if (!isBackupDownload) return;
+
+    const savePath = dialog.showSaveDialogSync(mainWindow, {
+      title: 'Salvar backup do deathStuffs',
+      defaultPath: path.join(app.getPath('documents'), suggestedName),
+      buttonLabel: 'Salvar Backup',
+      filters: [
+        { name: 'Backup deathStuffs', extensions: ['dsb'] },
+        { name: 'Todos os arquivos', extensions: ['*'] }
+      ]
+    });
+
+    if (!savePath) {
+      item.cancel();
+      return;
+    }
+
+    item.setSavePath(savePath);
+  });
 }
 
 function createWindow() {
@@ -148,6 +179,7 @@ function createTray() {
 
 app.whenReady().then(() => {
   startServer();
+  configureDownloadHandling();
   createWindow();
 
   // Tray creation can fail if icon doesn't exist yet, catch gracefully

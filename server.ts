@@ -1588,7 +1588,8 @@ app.get("/api/storage/backup/export", (req, res) => {
       dbBase64
     };
 
-    res.setHeader("Content-Disposition", `attachment; filename=deathStuffs-backup-${Date.now()}.dsb`);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader("Content-Disposition", `attachment; filename="deathStuffs-backup-${timestamp}.dsb"`);
     res.setHeader("Content-Type", "application/json");
     res.send(JSON.stringify(pack, null, 2));
   } catch (err: any) {

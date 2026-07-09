@@ -88,6 +88,8 @@ export default function SettingsPanel({
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResult, setMigrationResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isBackupImporting, setIsBackupImporting] = useState(false);
+  const [isBackupExporting, setIsBackupExporting] = useState(false);
+  const [backupExportResult, setBackupExportResult] = useState<{ success: boolean; message: string } | null>(null);
   const [backupRestoreResult, setBackupRestoreResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
@@ -145,6 +147,30 @@ export default function SettingsPanel({
       setIsBackupImporting(false);
     };
     reader.readAsText(file);
+  };
+
+  const handleExportBackup = () => {
+    setIsBackupExporting(true);
+    setBackupExportResult(null);
+
+    try {
+      const link = document.createElement('a');
+      link.href = `/api/storage/backup/export?ts=${Date.now()}`;
+      link.download = `deathStuffs-backup-${Date.now()}.dsb`;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      setBackupExportResult({
+        success: true,
+        message: 'Escolha onde salvar o arquivo .dsb na janela que abriu.',
+      });
+    } catch (err: any) {
+      setBackupExportResult({ success: false, message: `Falha ao iniciar backup: ${err.message}` });
+    } finally {
+      setTimeout(() => setIsBackupExporting(false), 1200);
+    }
   };
 
   const handleMigrateStorage = async () => {
@@ -1071,12 +1097,15 @@ export default function SettingsPanel({
                   <button
                     id="btn-export-backup"
                     type="button"
-                    onClick={() => {
-                      window.open("/api/storage/backup/export", "_blank");
-                    }}
-                    className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                    onClick={handleExportBackup}
+                    disabled={isBackupExporting}
+                    className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 hover:scale-[1.01] active:scale-[0.99] cursor-pointer disabled:opacity-50"
                   >
-                    <FolderOpen className="w-4 h-4" />
+                    {isBackupExporting ? (
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <FolderOpen className="w-4 h-4" />
+                    )}
                     Exportar Backup da Base
                   </button>
 
@@ -1105,6 +1134,13 @@ export default function SettingsPanel({
                     className="hidden"
                   />
                 </div>
+
+                {backupExportResult && (
+                  <div className={`p-3 rounded-lg flex items-start gap-2 text-xs mt-2 ${backupExportResult.success ? 'bg-emerald-50 border border-emerald-150 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-400' : 'bg-rose-50 border border-rose-150 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-400'}`}>
+                    {backupExportResult.success ? <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                    <span>{backupExportResult.message}</span>
+                  </div>
+                )}
 
                 {backupRestoreResult && (
                   <div className={`p-3 rounded-lg flex items-start gap-2 text-xs mt-2 ${backupRestoreResult.success ? 'bg-emerald-50 border border-emerald-150 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-400' : 'bg-rose-50 border border-rose-150 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-400'}`}>

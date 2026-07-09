@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Remove janela branca auxiliar no desktop\n- WhatsApp passa a preferir Chromium headless do Puppeteer em vez de Chrome/Edge local\n- Bloqueia janelas secundarias do Electron e mostra a interface so depois de carregada`,
+        body: `deathStuffs ${tag}\n\n- Corrige exportacao de backup que nao reagia ao clique\n- Backup .dsb agora abre janela nativa para escolher onde salvar\n- Exportacao nao depende mais de abrir janela secundaria bloqueada`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
