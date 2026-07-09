@@ -133,11 +133,13 @@ export default function App() {
 
   // General reminder notes
   const [reminders, setReminders] = useState<AppReminder[]>([]);
+  const [reminderTitle, setReminderTitle] = useState('');
   const [reminderDraft, setReminderDraft] = useState('');
   const [scheduleReminder, setScheduleReminder] = useState(false);
   const [generalReminderAmount, setGeneralReminderAmount] = useState('1');
   const [generalReminderUnit, setGeneralReminderUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
   const [savingReminder, setSavingReminder] = useState(false);
+  const [showReminderComposer, setShowReminderComposer] = useState(false);
 
   // Global Stock Cache for Notification Matching
   const [stockProducts, setStockProducts] = useState<any[]>([]);
@@ -396,7 +398,9 @@ export default function App() {
 
   const handleCreateReminder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reminderDraft.trim()) return;
+    const cleanTitle = reminderTitle.trim();
+    const cleanNote = reminderDraft.trim();
+    if (!cleanTitle && !cleanNote) return;
     setSavingReminder(true);
     try {
       const reminderHours = getGeneralReminderHours();
@@ -404,17 +408,19 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          note: reminderDraft,
+          note: cleanTitle && cleanNote ? `${cleanTitle}\n${cleanNote}` : (cleanTitle || cleanNote),
           reminderHours
         })
       });
       if (res.ok) {
         const data = await res.json();
         setReminders(data.reminders || []);
+        setReminderTitle('');
         setReminderDraft('');
         setScheduleReminder(false);
         setGeneralReminderAmount('1');
         setGeneralReminderUnit('hours');
+        setShowReminderComposer(false);
       }
     } catch (e) {
       console.error('Error creating reminder:', e);
@@ -880,6 +886,17 @@ export default function App() {
             )}
           </div>
 
+          {/* Quick reminder creator */}
+          <button
+            id="btn-open-reminder-composer"
+            onClick={() => setShowReminderComposer(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 shadow-2xs transition-all cursor-pointer"
+            title="Cadastrar lembrete"
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden xl:inline text-[10px] font-black uppercase tracking-wider">Cadastrar lembrete</span>
+          </button>
+
           {/* Quick Theme toggler */}
           <button
             id="btn-quick-theme-toggle"
@@ -1146,7 +1163,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* General reminders notebook */}
+            {false && (
             <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xs">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2.5">
@@ -1266,6 +1283,8 @@ export default function App() {
                 </div>
               </div>
             </section>
+
+            )}
 
             {/* 2. SEARCH, FILTERS & ACTION CONTROLS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xs space-y-3">
@@ -1454,6 +1473,10 @@ export default function App() {
               onReset={handleResetSettings}
               onClearDatabase={handleClearDatabase}
               onTriggerScanSim={handleTriggerWhatsAppScanSim}
+              reminders={reminders}
+              onOpenReminderModal={() => setShowReminderComposer(true)}
+              onCompleteReminder={handleCompleteReminder}
+              onDeleteReminder={handleDeleteReminder}
             />
           </div>
         )}
@@ -1582,6 +1605,123 @@ export default function App() {
                 </div>
               </motion.div>
             ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- REMINDER COMPOSER MODAL --- */}
+      <AnimatePresence>
+        {showReminderComposer && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 16 }}
+              className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Cadastrar lembrete</h2>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Bilhete pessoal do painel</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowReminderComposer(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Fechar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateReminder} className="p-5 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Nome do lembrete</label>
+                  <input
+                    type="text"
+                    value={reminderTitle}
+                    onChange={(e) => setReminderTitle(e.target.value)}
+                    placeholder="Ex: Conferir conta do cliente"
+                    className="w-full text-sm px-3 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">Motivo / anotação</label>
+                  <textarea
+                    value={reminderDraft}
+                    onChange={(e) => setReminderDraft(e.target.value)}
+                    rows={4}
+                    placeholder="Ex: verificar entrega do cliente, trocar senha da conta, responder suporte..."
+                    className="w-full text-sm p-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/30 p-3 space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <div
+                      onClick={() => setScheduleReminder(!scheduleReminder)}
+                      className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative cursor-pointer ${scheduleReminder ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-700'}`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${scheduleReminder ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </div>
+                    <Bell className={`w-4 h-4 ${scheduleReminder ? 'text-indigo-500' : 'text-slate-400'}`} />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Me alertar depois</span>
+                  </label>
+
+                  {scheduleReminder && (
+                    <div className="grid grid-cols-[1fr_130px] gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tempo</label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.01"
+                          value={generalReminderAmount}
+                          onChange={(e) => setGeneralReminderAmount(e.target.value)}
+                          className="w-full text-sm px-3 py-2 border border-indigo-200 dark:border-indigo-900/60 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Unidade</label>
+                        <select
+                          value={generalReminderUnit}
+                          onChange={(e) => setGeneralReminderUnit(e.target.value as 'minutes' | 'hours' | 'days')}
+                          className="w-full text-sm px-3 py-2 border border-indigo-200 dark:border-indigo-900/60 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        >
+                          <option value="minutes">Minutos</option>
+                          <option value="hours">Horas</option>
+                          <option value="days">Dias</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowReminderComposer(false)}
+                    className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={(!reminderTitle.trim() && !reminderDraft.trim()) || savingReminder}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                  >
+                    {savingReminder ? 'Salvando...' : 'Criar lembrete'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

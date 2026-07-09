@@ -666,8 +666,20 @@ async function syncDiscordHistory() {
 // --- 4. DUAL-MODE WHATSAPP CLIENT ---
 let wpClient: any = null;
 let simulatedWhatsAppTimer: NodeJS.Timeout | null = null;
+let whatsappStartupTimer: NodeJS.Timeout | null = null;
+let whatsappBootId = 0;
 
-function stopWhatsAppBot() {
+function clearWhatsAppStartupTimer() {
+  if (whatsappStartupTimer) {
+    clearTimeout(whatsappStartupTimer);
+    whatsappStartupTimer = null;
+  }
+}
+
+function stopWhatsAppBot(options: { log?: boolean; broadcast?: boolean } = {}) {
+  const { log = true, broadcast = true } = options;
+  whatsappBootId++;
+  clearWhatsAppStartupTimer();
   if (simulatedWhatsAppTimer) {
     clearTimeout(simulatedWhatsAppTimer);
     simulatedWhatsAppTimer = null;
@@ -692,8 +704,8 @@ function stopWhatsAppBot() {
     qrCode: null,
     statusText: "WhatsApp Desconectado",
   };
-  addLog("whatsapp", "warn", "Serviço WhatsApp desativado.");
-  broadcastEvent("status_whatsapp", whatsappStatus);
+  if (log) addLog("whatsapp", "warn", "Servico WhatsApp desativado.");
+  if (broadcast) broadcastEvent("status_whatsapp", whatsappStatus);
 }
 
 function getChromeExecutablePath() {
@@ -721,19 +733,54 @@ function getChromeExecutablePath() {
   return undefined; // Fallback to Puppeteer default
 }
 
-function startWhatsAppBot() {
-  stopWhatsAppBot();
-
+function startWhatsAppBot(force = false) {
   if (!settings.whatsapp.enabled) {
-    whatsappStatus.statusText = "Serviço desativado";
+    stopWhatsAppBot({ log: false, broadcast: false });
+    whatsappStatus = {
+      status: 'desconectado',
+      qrCode: null,
+      statusText: "Servico desativado",
+    };
     broadcastEvent("status_whatsapp", whatsappStatus);
     return;
   }
+
+  if (!force && wpClient && ['conectando', 'esperando_qr', 'conectado'].includes(whatsappStatus.status)) {
+    addLog("whatsapp", "info", `WhatsApp ja esta em estado: ${whatsappStatus.statusText}`);
+    broadcastEvent("status_whatsapp", whatsappStatus);
+    return;
+  }
+
+  stopWhatsAppBot({ log: false, broadcast: false });
+  const bootId = ++whatsappBootId;
 
   addLog("whatsapp", "info", "Iniciando cliente nativo WhatsApp...");
   whatsappStatus.status = 'conectando';
   whatsappStatus.statusText = "Inicializando Chromium...";
   broadcastEvent("status_whatsapp", whatsappStatus);
+
+  whatsappStartupTimer = setTimeout(() => {
+    if (bootId !== whatsappBootId || whatsappStatus.status !== 'conectando') return;
+    whatsappBootId++;
+    whatsappStartupTimer = null;
+
+    addLog("whatsapp", "error", "WhatsApp demorou demais para iniciar. A tentativa foi encerrada para evitar carregamento infinito.");
+
+    const stalledClient = wpClient;
+    wpClient = null;
+    if (stalledClient) {
+      try {
+        stalledClient.destroy();
+      } catch (e) { }
+    }
+
+    whatsappStatus = {
+      status: 'desconectado',
+      qrCode: null,
+      statusText: "Falha ao iniciar. Tente reconectar nas configuracoes.",
+    };
+    broadcastEvent("status_whatsapp", whatsappStatus);
+  }, 60000);
 
   // Clear directory locks to avoid Chrome startup profile hang
   try {
@@ -772,7 +819,9 @@ function startWhatsAppBot() {
   });
 
   wpClient.on('qr', async (qr: string) => {
+    if (bootId !== whatsappBootId) return;
     try {
+      clearWhatsAppStartupTimer();
       const qrDataUrl = await qrcode.toDataURL(qr);
       whatsappStatus.status = 'esperando_qr';
       whatsappStatus.qrCode = qrDataUrl;
@@ -785,6 +834,8 @@ function startWhatsAppBot() {
   });
 
   wpClient.on('ready', () => {
+    if (bootId !== whatsappBootId) return;
+    clearWhatsAppStartupTimer();
     whatsappStatus.status = 'conectado';
     whatsappStatus.qrCode = null;
     whatsappStatus.statusText = "Conectado e Ativo";
@@ -793,16 +844,51 @@ function startWhatsAppBot() {
   });
 
   wpClient.on('disconnected', (reason) => {
+    if (bootId !== whatsappBootId) return;
+    whatsappBootId++;
+    clearWhatsAppStartupTimer();
     addLog("whatsapp", "warn", `WhatsApp desconectado: ${reason}`);
-    stopWhatsAppBot();
+    wpClient = null;
+    whatsappStatus = {
+      status: 'desconectado',
+      qrCode: null,
+      statusText: "WhatsApp Desconectado",
+    };
+    broadcastEvent("status_whatsapp", whatsappStatus);
   });
 
   wpClient.on('auth_failure', (msg) => {
-    addLog("whatsapp", "error", `Falha na autenticação WhatsApp: ${msg}`);
+    if (bootId !== whatsappBootId) return;
+    whatsappBootId++;
+    clearWhatsAppStartupTimer();
+    addLog("whatsapp", "error", `Falha na autenticacao WhatsApp: ${msg}`);
+    const failedClient = wpClient;
+    wpClient = null;
+    if (failedClient) {
+      try {
+        failedClient.destroy();
+      } catch (e) { }
+    }
+    whatsappStatus = {
+      status: 'desconectado',
+      qrCode: null,
+      statusText: "Falha de autenticacao. Desconecte e leia um novo QR Code.",
+    };
+    broadcastEvent("status_whatsapp", whatsappStatus);
   });
 
   wpClient.initialize().catch(err => {
+    if (bootId !== whatsappBootId) return;
+    whatsappBootId++;
+    clearWhatsAppStartupTimer();
     addLog("whatsapp", "error", `Falha ao iniciar core do WhatsApp: ${err.message}`);
+    whatsappStatus = {
+      status: 'desconectado',
+      qrCode: null,
+      statusText: "Falha ao iniciar WhatsApp. Tente reconectar nas configuracoes.",
+    };
+    wpClient = null;
+    broadcastEvent("status_whatsapp", whatsappStatus);
   });
 }
 
@@ -1231,7 +1317,7 @@ app.post("/api/settings", (req, res) => {
       startDiscordBot();
     }
     if (oldSettings.whatsapp.enabled !== settings.whatsapp.enabled) {
-      if (settings.whatsapp.enabled) startWhatsAppBot();
+      if (settings.whatsapp.enabled) startWhatsAppBot(true);
       else stopWhatsAppBot();
     }
 
@@ -1400,7 +1486,7 @@ app.post("/api/storage/backup/import", (req, res) => {
 
     startDiscordBot();
     if (settings.whatsapp.enabled) {
-      startWhatsAppBot();
+      startWhatsAppBot(true);
     }
 
     res.json({ success: true });
@@ -1477,7 +1563,7 @@ app.post("/api/storage/migrate", (req, res) => {
 
         startDiscordBot();
         if (settings.whatsapp.enabled) {
-          startWhatsAppBot();
+          startWhatsAppBot(true);
         }
 
         res.json({ success: true, currentPath: STORAGE_DIR });
@@ -1487,7 +1573,7 @@ app.post("/api/storage/migrate", (req, res) => {
         initDatabase(STORAGE_DIR);
         startDiscordBot();
         if (settings.whatsapp.enabled) {
-          startWhatsAppBot();
+          startWhatsAppBot(true);
         }
         res.status(500).json({ error: `Erro na transferência física de dados: ${err.message}` });
       }
@@ -1828,7 +1914,7 @@ app.post("/api/whatsapp/test", async (req, res) => {
   }
 
   addLog("whatsapp", "info", "Forçando reinício e verificação do WhatsApp...");
-  startWhatsAppBot();
+  startWhatsAppBot(true);
 
   setTimeout(() => {
     if (whatsappStatus.status === 'conectado') {
@@ -1854,7 +1940,7 @@ app.post("/api/whatsapp/disconnect", async (req, res) => {
     }
 
     // Automatically bring the QR code scanner back up if enabled
-    if (settings.whatsapp.enabled) startWhatsAppBot();
+    if (settings.whatsapp.enabled) startWhatsAppBot(true);
 
     res.json({ success: true, message: "Sessão desconectada. Você já pode ler um novo QR Code." });
   } catch (err: any) {

@@ -26,10 +26,11 @@ import {
   RefreshCw,
   Search,
   Image,
-  X,
+  FileText,
+  Bell,
   Trash2
 } from 'lucide-react';
-import { AppSettings, SystemStatus } from '../types';
+import { AppSettings, SystemStatus, type AppReminder } from '../types';
 
 interface SettingsPanelProps {
   settings: AppSettings;
@@ -41,9 +42,13 @@ interface SettingsPanelProps {
   onClearDatabase: () => void;
   onDisconnectWhatsApp: () => Promise<void>;
   onTriggerScanSim?: () => void;
+  reminders: AppReminder[];
+  onOpenReminderModal: () => void;
+  onCompleteReminder: (id: string) => Promise<void>;
+  onDeleteReminder: (id: string) => Promise<void>;
 }
 
-type TabType = 'discord' | 'whatsapp' | 'geral' | 'dados' | 'guia';
+type TabType = 'discord' | 'whatsapp' | 'geral' | 'lembretes' | 'dados' | 'guia';
 
 export default function SettingsPanel({
   settings: initialSettings,
@@ -54,7 +59,11 @@ export default function SettingsPanel({
   onReset,
   onClearDatabase,
   onDisconnectWhatsApp,
-  onTriggerScanSim
+  onTriggerScanSim,
+  reminders,
+  onOpenReminderModal,
+  onCompleteReminder,
+  onDeleteReminder
 }: SettingsPanelProps) {
   const [settings, setSettings] = useState<AppSettings>({ ...initialSettings });
   const [activeTab, setActiveTab] = useState<TabType>('discord');
@@ -195,6 +204,16 @@ export default function SettingsPanel({
     setTimeout(() => setWhatsappTestResult(null), 6000);
   };
 
+  const formatReminderDate = (dateString?: string | null) => {
+    if (!dateString) return 'Sem alerta agendado';
+    return new Date(dateString).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   const togglePriority = (prio: string) => {
     const current = [...settings.whatsapp.priorities];
     if (current.includes(prio)) {
@@ -279,6 +298,19 @@ export default function SettingsPanel({
         >
           <Settings className="w-4 h-4" />
           <span>Geral & Som</span>
+        </button>
+
+        <button
+          id="tab-lembretes"
+          type="button"
+          onClick={() => setActiveTab('lembretes')}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'lembretes'
+            ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50'
+            }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span>Meus lembretes</span>
         </button>
 
         <button
@@ -848,6 +880,100 @@ export default function SettingsPanel({
                   Limpar Banco de Dados
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: MEUS LEMBRETES */}
+        {activeTab === 'lembretes' && (
+          <div className="space-y-4 font-sans text-slate-800 dark:text-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  Meus lembretes
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Bilhetes salvos para lembrar tarefas, contas e combinados.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={onOpenReminderModal}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer"
+              >
+                <Bell className="w-4 h-4" />
+                Cadastrar lembrete
+              </button>
+            </div>
+
+            <div className="border border-slate-200 dark:border-slate-850 rounded-xl overflow-hidden bg-white dark:bg-slate-950/20">
+              {reminders.length === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-500 mx-auto flex items-center justify-center mb-3">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Nenhum lembrete salvo</p>
+                  <p className="text-xs text-slate-400 mt-1">Use o botão acima para criar seu primeiro bilhete.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-850 max-h-[460px] overflow-y-auto custom-scrollbar">
+                  {reminders.map((reminder) => {
+                    const due = reminder.remindAt ? new Date(reminder.remindAt).getTime() <= Date.now() : false;
+                    return (
+                      <div
+                        key={reminder.id}
+                        className={`p-4 transition-colors ${due && !reminder.alertSent ? 'bg-rose-50/70 dark:bg-rose-950/20' : 'bg-white dark:bg-slate-950/10'}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${reminder.remindAt ? 'bg-indigo-500/10 text-indigo-500' : 'bg-slate-100 dark:bg-slate-850 text-slate-400'}`}>
+                            {reminder.remindAt ? <Bell className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 whitespace-pre-wrap break-words leading-relaxed">
+                              {reminder.note}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${due && !reminder.alertSent
+                                ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300'
+                                : reminder.alertSent
+                                  ? 'bg-slate-100 text-slate-500 dark:bg-slate-850 dark:text-slate-400'
+                                  : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-300'
+                                }`}>
+                                {reminder.alertSent ? 'Alerta enviado' : formatReminderDate(reminder.remindAt)}
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400">
+                                Criado em {formatReminderDate(reminder.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => onCompleteReminder(reminder.id)}
+                              className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                              title="Marcar como feito"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteReminder(reminder.id)}
+                              className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
