@@ -9,6 +9,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { StockProduct } from "./src/types.js";
 
 let db: Database.Database;
@@ -272,6 +273,22 @@ export function getStockSummary(): StockProduct[] {
   }
 
   return summary;
+}
+
+export async function exportDatabaseSnapshotBase64(): Promise<string> {
+  if (!db) {
+    throw new Error("Banco de estoque nao inicializado.");
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deathstuffs-stock-backup-"));
+  const tempDbPath = path.join(tempDir, "stock.db");
+
+  try {
+    await db.backup(tempDbPath);
+    return fs.readFileSync(tempDbPath).toString("base64");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 // --- CLEANUP ---

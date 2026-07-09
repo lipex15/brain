@@ -109,11 +109,17 @@ export default function SettingsPanel({
         const text = event.target?.result as string;
         const payload = JSON.parse(text);
 
-        if (!payload.dbBase64) {
-          throw new Error("Arquivo de backup inválido (conversão binária ausente).");
+        const backupDbBase64 = payload?.stock?.dbBase64 || payload?.dbBase64;
+
+        if (!backupDbBase64) {
+          throw new Error("Arquivo de backup de estoque invalido (base de contas ausente).");
         }
 
-        const confirm = window.confirm("Atenção: Restaurar este backup substituirá as contas locais e as configurações ativas atuais. Deseja continuar?");
+        const stats = payload?.stock?.stats;
+        const statsText = stats
+          ? `\n\nArquivo selecionado: ${stats.products || 0} produtos, ${stats.items || 0} contas, ${stats.available || 0} disponiveis e ${stats.sold || 0} vendidas.`
+          : "";
+        const confirm = window.confirm(`Atencao: Restaurar este backup substituirá o estoque local atual pelo estoque salvo no arquivo. Configuracoes e notificacoes nao serao alteradas.${statsText}\n\nDeseja continuar?`);
         if (!confirm) {
           setIsBackupImporting(false);
           return;
@@ -132,7 +138,7 @@ export default function SettingsPanel({
           throw new Error(errData.error || "Erro de resposta da API do servidor.");
         }
 
-        setBackupRestoreResult({ success: true, message: "Backup restaurado com sucesso! Recarregando aplicação..." });
+        setBackupRestoreResult({ success: true, message: "Estoque restaurado com sucesso! Recarregando aplicacao..." });
         setTimeout(() => {
           window.location.reload();
         }, 1500);
@@ -143,7 +149,7 @@ export default function SettingsPanel({
       }
     };
     reader.onerror = () => {
-      setBackupRestoreResult({ success: false, message: "Falha na leitura física do arquivo." });
+      setBackupRestoreResult({ success: false, message: "Falha na leitura fisica do arquivo." });
       setIsBackupImporting(false);
     };
     reader.readAsText(file);
@@ -156,7 +162,7 @@ export default function SettingsPanel({
     try {
       const link = document.createElement('a');
       link.href = `/api/storage/backup/export?ts=${Date.now()}`;
-      link.download = `deathStuffs-backup-${Date.now()}.dsb`;
+      link.download = `deathStuffs-stock-backup-${Date.now()}.dsb`;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
@@ -164,7 +170,7 @@ export default function SettingsPanel({
 
       setBackupExportResult({
         success: true,
-        message: 'Escolha onde salvar o arquivo .dsb na janela que abriu.',
+        message: 'Escolha onde salvar o backup do estoque na janela que abriu.',
       });
     } catch (err: any) {
       setBackupExportResult({ success: false, message: `Falha ao iniciar backup: ${err.message}` });
@@ -1086,11 +1092,11 @@ export default function SettingsPanel({
                 </p>
               </div>
 
-              {/* BACKUP INTEGRAL */}
+              {/* BACKUP DO ESTOQUE */}
               <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-900/10 space-y-3.5">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-150">Backup Integral (.dsb)</h4>
+                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-150">Backup do Estoque (.dsb)</h4>
                 <p className="text-[11.5px] text-slate-450 dark:text-slate-450 leading-relaxed font-medium">
-                  Gere um arquivo de salvamento para prevenir qualquer perda em caso de formatação ou problemas no computador. O backup preserva todas as suas contas cravadas e o painel.
+                  Gere um arquivo de salvamento apenas do estoque. Ele preserva produtos, contas, status de disponível/vendido, garantias e lembretes vinculados às contas.
                 </p>
 
                 <div className="flex flex-wrap gap-2.5">
@@ -1106,7 +1112,7 @@ export default function SettingsPanel({
                     ) : (
                       <FolderOpen className="w-4 h-4" />
                     )}
-                    Exportar Backup da Base
+                    Exportar Backup do Estoque
                   </button>
 
                   <button
@@ -1123,7 +1129,7 @@ export default function SettingsPanel({
                     ) : (
                       <RotateCcw className="w-4 h-4" />
                     )}
-                    Restaurar Arquivo (.dsb)
+                    Restaurar Estoque (.dsb)
                   </button>
 
                   <input

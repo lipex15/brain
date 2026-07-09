@@ -7,12 +7,13 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import Database from "better-sqlite3";
 import { Client as DiscordClient, GatewayIntentBits, TextChannel, Message } from "discord.js";
 import qrcode from "qrcode";
 import pkg from "whatsapp-web.js";
 const { Client: WhatsAppClient, LocalAuth } = pkg;
 import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, type AppReminder } from "./src/types.js";
-import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase } from "./database.js";
+import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase, exportDatabaseSnapshotBase64 } from "./database.js";
 import cors from "cors";
 import multer from "multer";
 
@@ -43,7 +44,7 @@ app.get('/api/local-image', (req, res) => {
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 // --- CUSTOM BACKGROUND UPLOAD UTLITY ---
 // Ensure STORAGE_DIR is available or retrieve it
@@ -1566,30 +1567,100 @@ function copyRecursiveSync(src: string, dest: string) {
   }
 }
 
+function getStockBackupStats() {
+  const productCount = dbGet("SELECT COUNT(*) AS count FROM products") as any;
+  const itemCount = dbGet("SELECT COUNT(*) AS count FROM items") as any;
+  const availableCount = dbGet("SELECT COUNT(*) AS count FROM items WHERE status = 'disponivel'") as any;
+  const soldCount = dbGet("SELECT COUNT(*) AS count FROM items WHERE status = 'vendido'") as any;
+  const lowStockCount = dbGet(`
+    SELECT COUNT(*) AS count FROM (
+      SELECT p.id
+      FROM products p
+      LEFT JOIN items i ON i.product_id = p.id AND i.status = 'disponivel'
+      GROUP BY p.id, p.minWarning
+      HAVING COUNT(i.id) <= COALESCE(p.minWarning, 2)
+    )
+  `) as any;
+
+  return {
+    products: Number(productCount?.count || 0),
+    items: Number(itemCount?.count || 0),
+    available: Number(availableCount?.count || 0),
+    sold: Number(soldCount?.count || 0),
+    lowStock: Number(lowStockCount?.count || 0),
+  };
+}
+
+function validateStockDatabaseBuffer(buffer: Buffer) {
+  const sqliteHeader = Buffer.from("SQLite format 3\0", "utf8");
+  if (buffer.length < sqliteHeader.length || !buffer.subarray(0, sqliteHeader.length).equals(sqliteHeader)) {
+    throw new Error("Arquivo de backup invalido: banco de estoque ausente ou corrompido.");
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deathstuffs-stock-restore-check-"));
+  const tempDbPath = path.join(tempDir, "stock.db");
+
+  try {
+    fs.writeFileSync(tempDbPath, buffer);
+    const tempDb = new Database(tempDbPath, { readonly: true, fileMustExist: true });
+    try {
+      const integrity = tempDb.pragma("integrity_check", { simple: true });
+      if (integrity !== "ok") {
+        throw new Error(`Arquivo de backup invalido: integridade do estoque retornou ${integrity}.`);
+      }
+
+      const requiredTables = tempDb.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE type = 'table' AND name IN ('products', 'items')
+      `).all().map((row: any) => row.name);
+
+      if (!requiredTables.includes("products") || !requiredTables.includes("items")) {
+        throw new Error("Arquivo de backup invalido: tabelas de estoque nao encontradas.");
+      }
+
+      const products = (tempDb.prepare("SELECT COUNT(*) AS count FROM products").get() as any).count;
+      const items = (tempDb.prepare("SELECT COUNT(*) AS count FROM items").get() as any).count;
+      const available = (tempDb.prepare("SELECT COUNT(*) AS count FROM items WHERE status = 'disponivel'").get() as any).count;
+      const sold = (tempDb.prepare("SELECT COUNT(*) AS count FROM items WHERE status = 'vendido'").get() as any).count;
+
+      return {
+        products: Number(products || 0),
+        items: Number(items || 0),
+        available: Number(available || 0),
+        sold: Number(sold || 0),
+      };
+    } finally {
+      tempDb.close();
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 // Get current storage path
 app.get("/api/storage/info", (req, res) => {
   res.json({ currentPath: STORAGE_DIR });
 });
 
-// Export database backup as single base64 JSON downloadable packet
-app.get("/api/storage/backup/export", (req, res) => {
+// Export a stock-only backup as a consistent SQLite snapshot inside a .dsb packet
+app.get("/api/storage/backup/export", async (req, res) => {
   try {
-    const dbFile = path.join(STORAGE_DIR, "stock.db");
-    let dbBase64 = "";
-    if (fs.existsSync(dbFile)) {
-      dbBase64 = fs.readFileSync(dbFile).toString("base64");
-    }
+    const dbBase64 = await exportDatabaseSnapshotBase64();
+    const stats = getStockBackupStats();
+    const createdAt = new Date().toISOString();
 
     const pack = {
-      version: "1.0",
-      timestamp: new Date().toISOString(),
-      settings,
-      notifications,
-      dbBase64
+      version: "2.0",
+      type: "deathstuffs-stock-backup",
+      timestamp: createdAt,
+      stock: {
+        dbBase64,
+        stats
+      }
     };
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    res.setHeader("Content-Disposition", `attachment; filename="deathStuffs-backup-${timestamp}.dsb"`);
+    const timestamp = createdAt.replace(/[:.]/g, '-');
+    res.setHeader("Content-Disposition", `attachment; filename="deathStuffs-stock-backup-${timestamp}.dsb"`);
     res.setHeader("Content-Type", "application/json");
     res.send(JSON.stringify(pack, null, 2));
   } catch (err: any) {
@@ -1597,39 +1668,38 @@ app.get("/api/storage/backup/export", (req, res) => {
   }
 });
 
-// Import backup JSON packet directly and restore local database/configs
+// Import stock backup JSON packet and restore only the stock database
 app.post("/api/storage/backup/import", (req, res) => {
   try {
-    const { settings: backupSettings, notifications: backupNotifications, dbBase64 } = req.body;
+    const dbBase64 = req.body?.stock?.dbBase64 || req.body?.dbBase64;
     if (!dbBase64) {
-      return res.status(400).json({ error: "Backup inválido ou corrompido (banco ausente)." });
+      return res.status(400).json({ error: "Backup invalido ou corrompido (estoque ausente)." });
     }
 
-    addLog("sistema", "info", "Iniciando restauração de backup local...");
+    const backupBuffer = Buffer.from(dbBase64, "base64");
+    const importedStats = validateStockDatabaseBuffer(backupBuffer);
+
+    addLog("sistema", "info", "Iniciando restauracao de backup de estoque...");
 
     // 1. Fechar bots e o banco sqlite
     stopDiscordBot();
     stopWhatsAppBot();
     closeDatabase();
 
-    // 2. Gravar os arquivos físicos convertidos de volta
+    // 2. Gravar somente a base de estoque e remover sidecars WAL/SHM antigos
     const dbFile = path.join(STORAGE_DIR, "stock.db");
-    fs.writeFileSync(dbFile, Buffer.from(dbBase64, "base64"));
-
-    if (backupSettings) {
-      settings = { ...DEFAULT_SETTINGS, ...backupSettings };
-      saveSettings(settings);
+    for (const file of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) {
+      if (fs.existsSync(file)) {
+        fs.rmSync(file, { force: true });
+      }
     }
-    if (backupNotifications) {
-      notifications = backupNotifications;
-      saveNotifications(notifications);
-    }
+    fs.writeFileSync(dbFile, backupBuffer);
 
-    // 3. Re-iniciar banco e conexões dos bots
+    // 3. Re-iniciar banco e conexoes dos bots
     initDatabase(STORAGE_DIR);
     settings = loadSettings();
 
-    addLog("sistema", "success", "Backup restaurado com sucesso! Serviços reiniciados.");
+    addLog("sistema", "success", `Estoque restaurado com sucesso: ${importedStats.products} produtos e ${importedStats.items} contas.`);
 
     startDiscordBot();
     if (settings.whatsapp.enabled) {

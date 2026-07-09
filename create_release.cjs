@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige exportacao de backup que nao reagia ao clique\n- Backup .dsb agora abre janela nativa para escolher onde salvar\n- Exportacao nao depende mais de abrir janela secundaria bloqueada`,
+        body: `deathStuffs ${tag}\n\n- Corrige backup do estoque para salvar a base ativa completa, incluindo alteracoes recentes do SQLite\n- Backup .dsb agora e focado apenas no estoque: produtos, contas, status, garantias e lembretes de conta\n- Restauracao valida o arquivo antes de substituir o estoque e nao altera notificacoes/configuracoes`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
