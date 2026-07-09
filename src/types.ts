@@ -105,6 +105,39 @@ export interface AppReminder {
   completedAt?: string | null;
 }
 
+export type SubscriptionPlatform = 'ggmax' | 'gamemarket';
+export type SubscriptionStatus = 'active' | 'expired' | 'renewed' | 'canceled';
+
+export interface SubscriptionRecord {
+  id: string;
+  platform: SubscriptionPlatform;
+  customerName: string;
+  chatLink?: string | null;
+  productName: string;
+  purchaseDate: string;
+  startDate: string;
+  durationDays: number;
+  expiresAt: string;
+  status: SubscriptionStatus;
+  computedStatus: SubscriptionStatus;
+  notes?: string | null;
+  alert3dSent: boolean;
+  alert1dSent: boolean;
+  alertDueSent: boolean;
+  renewalCount: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  daysLeft: number;
+}
+
+export interface SubscriptionSummary {
+  total: number;
+  active: number;
+  expiringSoon: number;
+  expired: number;
+  canceled: number;
+}
+
 export interface UpdaterState {
   status: 'none' | 'checking' | 'available' | 'downloading' | 'ready' | 'error';
   progress: number;

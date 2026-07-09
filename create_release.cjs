@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige backup do estoque para salvar a base ativa completa, incluindo alteracoes recentes do SQLite\n- Backup .dsb agora e focado apenas no estoque: produtos, contas, status, garantias e lembretes de conta\n- Restauracao valida o arquivo antes de substituir o estoque e nao altera notificacoes/configuracoes`,
+        body: `deathStuffs ${tag}\n\n- Adiciona painel de Assinaturas separado por GGMAX e GameMarket\n- Permite cadastrar cliente, chat, data da compra, ativacao, duracao, vencimento e observacoes\n- Inclui alertas automaticos de vencimento no app, WhatsApp e Discord, com renovacao/cancelamento manual`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

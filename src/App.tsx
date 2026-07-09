@@ -33,7 +33,8 @@ import {
   Moon,
   Bot,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  CalendarClock
 } from 'lucide-react';
 
 const DeathstuffsLogo = () => (
@@ -75,10 +76,11 @@ import NotificationCard from './components/NotificationCard';
 import SettingsPanel from './components/SettingsPanel';
 import WhatsAppConnector from './components/WhatsAppConnector';
 import EstoquePanel from './components/EstoquePanel';
+import SubscriptionsPanel from './components/SubscriptionsPanel';
 
 export default function App() {
   // Navigation
-  const [activeTab, setActiveTab] = useState<'painel' | 'config' | 'logs' | 'estoque'>('painel');
+  const [activeTab, setActiveTab] = useState<'painel' | 'config' | 'logs' | 'estoque' | 'assinaturas'>('painel');
   const [settingsTabRequest, setSettingsTabRequest] = useState<{
     tab: 'discord' | 'whatsapp' | 'geral' | 'lembretes' | 'dados' | 'guia';
     key: number;
@@ -132,6 +134,7 @@ export default function App() {
   const [activeWarrantyAlerts, setActiveWarrantyAlerts] = useState<any[]>([]);
   const [activeReminderAlerts, setActiveReminderAlerts] = useState<any[]>([]);
   const [activeGeneralReminderAlerts, setActiveGeneralReminderAlerts] = useState<any[]>([]);
+  const [activeSubscriptionAlerts, setActiveSubscriptionAlerts] = useState<any[]>([]);
   const [activeWarranties, setActiveWarranties] = useState<any[]>([]);
   const [forceWarrantyFilter, setForceWarrantyFilter] = useState(false);
 
@@ -253,6 +256,17 @@ export default function App() {
     } catch (e) { }
   };
 
+  const playSubscriptionSound = () => {
+    if (soundMuted || !settings.general.soundEnabled) return;
+    try {
+      const audioCtx = createAudioContext();
+      playTone(audioCtx, 196.00, 0.00, 0.12, 'sawtooth', 0.14);
+      playTone(audioCtx, 880.00, 0.16, 0.10, 'square', 0.12);
+      playTone(audioCtx, 196.00, 0.30, 0.12, 'sawtooth', 0.14);
+      playTone(audioCtx, 987.77, 0.46, 0.24, 'square', 0.12);
+    } catch (e) { }
+  };
+
   // --- COMPONENT LIFECYCLE (DATA FETCHING & SSE) ---
   useEffect(() => {
     // Initial fetches
@@ -299,6 +313,8 @@ export default function App() {
           fetchActiveWarranties();
         } else if (type === 'reminders_refresh') {
           setReminders(data);
+        } else if (type === 'subscriptions_refresh') {
+          window.dispatchEvent(new Event('subscriptions_refresh'));
         } else if (type === 'notification_new') {
           setNotifications((prev) => [data, ...prev]);
           playAlertSound();
@@ -347,6 +363,19 @@ export default function App() {
           if (Notification.permission === 'granted') {
             new Notification(`LEMBRETE: ${data.productName}`, {
               body: `${data.login} - ${data.reminderNote || 'Verificar conta'}`,
+              requireInteraction: true
+            });
+          }
+        } else if (type === 'subscription_alert') {
+          setActiveSubscriptionAlerts(prev => {
+            if (prev.find(a => a.id === data.id && a.stage === data.stage)) return prev;
+            return [...prev, data];
+          });
+          playSubscriptionSound();
+          window.dispatchEvent(new Event('subscriptions_refresh'));
+          if (Notification.permission === 'granted') {
+            new Notification(`ASSINATURA: ${data.customerName}`, {
+              body: `${data.platformName} - ${data.stageTitle}`,
               requireInteraction: true
             });
           }
@@ -861,6 +890,17 @@ export default function App() {
           </button>
 
           <button
+            id="nav-assinaturas"
+            onClick={() => { setActiveTab('assinaturas'); setGlobalStockSearch(''); }}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === 'assinaturas'
+              ? 'bg-slate-900 text-white dark:bg-indigo-600 dark:text-white'
+              : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'
+              }`}
+          >
+            Assinaturas
+          </button>
+
+          <button
             id="nav-config"
             onClick={() => openSettingsTab('discord')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${activeTab === 'config'
@@ -995,6 +1035,7 @@ export default function App() {
             {[
               { id: 'painel', label: 'Painel Central' },
               { id: 'estoque', label: 'Estoque de Contas' },
+              { id: 'assinaturas', label: 'Assinaturas' },
               { id: 'config', label: 'Configurações' },
               { id: 'logs', label: 'Histórico de Logs' }
             ].map((item) => (
@@ -1496,6 +1537,13 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB: SUBSCRIPTIONS */}
+        {activeTab === 'assinaturas' && (
+          <div className="animate-fadeIn">
+            <SubscriptionsPanel />
+          </div>
+        )}
+
         {/* TAB 3: SETTINGS MANAGER */}
         {activeTab === 'config' && (
           <div className="animate-fadeIn">
@@ -1641,6 +1689,74 @@ export default function App() {
                     Estou Ciente — Fechar Alerta
                   </button>
                   <p className="text-[9px] text-center text-slate-400 font-medium">Acesse o painel do LZT e confirme se a conta permanece ativa.</p>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- SUBSCRIPTION ALERT MODALS --- */}
+      <AnimatePresence>
+        {activeSubscriptionAlerts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+          >
+            {activeSubscriptionAlerts.map(alert => (
+              <motion.div
+                key={`${alert.id}-${alert.stage}`}
+                initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                className="bg-white dark:bg-slate-900 border-2 border-indigo-500 rounded-2xl p-6 shadow-2xl max-w-md w-full relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500" />
+
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 flex-shrink-0 bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 rounded-full flex items-center justify-center border-4 border-white dark:border-slate-800 shadow-sm">
+                    <CalendarClock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Assinatura Game Pass</h2>
+                    <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mt-1 leading-tight">
+                      {alert.customerName} {alert.stageTitle}.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-2 gap-3">
+                    <span className="text-xs font-bold text-slate-500">Plataforma</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{alert.platformName}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-2 gap-3">
+                    <span className="text-xs font-bold text-slate-500">Cliente</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 text-right">{alert.customerName}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 gap-3">
+                    <span className="text-xs font-bold text-slate-500">Expira em</span>
+                    <span className="text-[10px] font-black uppercase text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full ring-1 ring-indigo-500/20">
+                      {new Date(alert.expiresAt).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-2">
+                  {alert.chatLink && (
+                    <a
+                      href={alert.chatLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors text-center"
+                    >
+                      Abrir Chat do Cliente
+                    </a>
+                  )}
+                  <button
+                    onClick={() => setActiveSubscriptionAlerts(prev => prev.filter(a => !(a.id === alert.id && a.stage === alert.stage)))}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors shadow-lg shadow-indigo-600/20 cursor-pointer"
+                  >
+                    Estou ciente
+                  </button>
                 </div>
               </motion.div>
             ))}

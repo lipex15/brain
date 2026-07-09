@@ -65,6 +65,39 @@ export function initDatabase(storageDir: string): void {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       completed_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL,
+      customer_name TEXT NOT NULL,
+      chat_link TEXT,
+      product_name TEXT DEFAULT 'Xbox Game Pass Ultimate 30 dias',
+      purchase_date TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      duration_days INTEGER DEFAULT 30,
+      expires_at TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      notes TEXT,
+      alert_3d_sent INTEGER DEFAULT 0,
+      alert_1d_sent INTEGER DEFAULT 0,
+      alert_due_sent INTEGER DEFAULT 0,
+      renewal_count INTEGER DEFAULT 0,
+      renewed_from_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS subscription_renewals (
+      id TEXT PRIMARY KEY,
+      subscription_id TEXT NOT NULL,
+      previous_start_date TEXT,
+      previous_expires_at TEXT,
+      new_start_date TEXT NOT NULL,
+      new_expires_at TEXT NOT NULL,
+      renewed_at TEXT NOT NULL,
+      note TEXT,
+      FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
+    );
   `);
   // Safe column migrations — silently ignored if column already exists
   const safeAlter = (sql: string) => {

@@ -12,7 +12,7 @@ import { Client as DiscordClient, GatewayIntentBits, TextChannel, Message } from
 import qrcode from "qrcode";
 import pkg from "whatsapp-web.js";
 const { Client: WhatsAppClient, LocalAuth } = pkg;
-import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, type AppReminder } from "./src/types.js";
+import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, type AppReminder, type SubscriptionPlatform, type SubscriptionRecord, type SubscriptionSummary } from "./src/types.js";
 import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase, exportDatabaseSnapshotBase64 } from "./database.js";
 import cors from "cors";
 import multer from "multer";
@@ -1226,6 +1226,179 @@ function sendGeneralReminderAlert(reminder: any) {
   });
 }
 
+const SUBSCRIPTION_PLATFORMS: SubscriptionPlatform[] = ["ggmax", "gamemarket"];
+const SUBSCRIPTION_DAY_MS = 24 * 60 * 60 * 1000;
+
+function normalizeSubscriptionPlatform(value: any): SubscriptionPlatform {
+  const platform = String(value || "").toLowerCase().trim();
+  if (!SUBSCRIPTION_PLATFORMS.includes(platform as SubscriptionPlatform)) {
+    throw new Error("Plataforma de assinatura invalida.");
+  }
+  return platform as SubscriptionPlatform;
+}
+
+function getSubscriptionPlatformName(platform: string) {
+  return platform === "ggmax" ? "GGMAX" : platform === "gamemarket" ? "GameMarket" : platform;
+}
+
+function parseSubscriptionDate(value: any, fallback?: Date) {
+  const raw = String(value || "").trim();
+  const date = raw ? new Date(raw) : (fallback || new Date());
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Data da assinatura invalida.");
+  }
+  return date;
+}
+
+function parseDurationDays(value: any, fallback = 30) {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 3650) {
+    throw new Error("Duracao da assinatura invalida.");
+  }
+  return parsed;
+}
+
+function calculateSubscriptionExpiration(startDate: Date, durationDays: number) {
+  return new Date(startDate.getTime() + durationDays * SUBSCRIPTION_DAY_MS);
+}
+
+function mapSubscription(row: any): SubscriptionRecord {
+  const now = Date.now();
+  const expiresAt = new Date(row.expires_at).getTime();
+  const isExpiredByDate = Number.isFinite(expiresAt) && expiresAt <= now;
+  const status = row.status || "active";
+  const computedStatus = status === "active" && isExpiredByDate ? "expired" : status;
+  const daysLeft = Number.isFinite(expiresAt) ? Math.ceil((expiresAt - now) / SUBSCRIPTION_DAY_MS) : 0;
+
+  return {
+    id: row.id,
+    platform: row.platform,
+    customerName: row.customer_name,
+    chatLink: row.chat_link,
+    productName: row.product_name || "Xbox Game Pass Ultimate 30 dias",
+    purchaseDate: row.purchase_date,
+    startDate: row.start_date,
+    durationDays: Number(row.duration_days || 30),
+    expiresAt: row.expires_at,
+    status,
+    computedStatus,
+    notes: row.notes,
+    alert3dSent: !!row.alert_3d_sent,
+    alert1dSent: !!row.alert_1d_sent,
+    alertDueSent: !!row.alert_due_sent,
+    renewalCount: Number(row.renewal_count || 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    daysLeft,
+  };
+}
+
+function getSubscriptions(platform?: SubscriptionPlatform): SubscriptionRecord[] {
+  const rows = platform
+    ? dbAll("SELECT * FROM subscriptions WHERE platform = ? ORDER BY expires_at ASC, created_at DESC", [platform])
+    : dbAll("SELECT * FROM subscriptions ORDER BY platform ASC, expires_at ASC, created_at DESC");
+  return rows.map(mapSubscription);
+}
+
+function getSubscriptionSummary(platform?: SubscriptionPlatform): SubscriptionSummary {
+  const subscriptions = getSubscriptions(platform);
+  return subscriptions.reduce<SubscriptionSummary>((summary, subscription) => {
+    summary.total += 1;
+    if (subscription.computedStatus === "active") {
+      summary.active += 1;
+      if (subscription.daysLeft >= 0 && subscription.daysLeft <= 3) {
+        summary.expiringSoon += 1;
+      }
+    } else if (subscription.computedStatus === "expired") {
+      summary.expired += 1;
+    } else if (subscription.computedStatus === "canceled") {
+      summary.canceled += 1;
+    }
+    return summary;
+  }, { total: 0, active: 0, expiringSoon: 0, expired: 0, canceled: 0 });
+}
+
+function broadcastSubscriptionsRefresh(platform?: SubscriptionPlatform) {
+  broadcastEvent("subscriptions_refresh", {
+    platform,
+    subscriptions: getSubscriptions(platform),
+    summary: getSubscriptionSummary(platform),
+  });
+}
+
+async function sendDiscordInternalMessage(text: string) {
+  if (!discordClient || !discordStatus.connected) return;
+  const channelId = settings.discord.channels
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)[0];
+
+  if (!channelId) {
+    addLog("discord", "warn", "Alerta de assinatura nao enviado: nenhum canal Discord configurado.");
+    return;
+  }
+
+  try {
+    const channel = await discordClient.channels.fetch(channelId);
+    if (channel instanceof TextChannel) {
+      await channel.send(text);
+      addLog("discord", "success", "Alerta de assinatura enviado para o Discord.");
+    } else {
+      addLog("discord", "warn", "Canal configurado para Discord nao e um canal de texto.");
+    }
+  } catch (err: any) {
+    addLog("discord", "error", `Falha ao enviar alerta de assinatura no Discord: ${err.message}`);
+  }
+}
+
+function sendSubscriptionAlert(subscriptionRow: any, stage: "3d" | "1d" | "due") {
+  const subscription = mapSubscription(subscriptionRow);
+  const platformName = getSubscriptionPlatformName(subscription.platform);
+  const expiresAt = new Date(subscription.expiresAt);
+  const formatted = expiresAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour12: false });
+  const stageTitle = stage === "3d"
+    ? "vence em ate 3 dias"
+    : stage === "1d"
+      ? "vence em ate 24 horas"
+      : "venceu";
+
+  broadcastEvent("subscription_alert", {
+    id: subscription.id,
+    platform: subscription.platform,
+    platformName,
+    customerName: subscription.customerName,
+    productName: subscription.productName,
+    chatLink: subscription.chatLink,
+    expiresAt: subscription.expiresAt,
+    stage,
+    stageTitle,
+  });
+  broadcastSubscriptionsRefresh(subscription.platform);
+
+  addLog("sistema", "warn", `ASSINATURA ${platformName}: ${subscription.customerName} ${stageTitle}.`);
+
+  let text = `🎮 *ASSINATURA GAME PASS*\n\n`;
+  text += `🏷️ *Plataforma:* ${platformName}\n`;
+  text += `👤 *Cliente:* ${subscription.customerName}\n`;
+  text += `📦 *Produto:* ${subscription.productName}\n`;
+  text += `⏳ *Status:* ${stageTitle.toUpperCase()}\n`;
+  text += `📅 *Expira em:* ${formatted}\n`;
+  if (subscription.chatLink) text += `🔗 *Chat:* ${subscription.chatLink}\n`;
+  if (subscription.notes) text += `📝 *Obs:* ${subscription.notes}\n`;
+  text += `\nAbra o deathStuffs brain para renovar, cancelar ou falar com o cliente.`;
+
+  if (settings.whatsapp.enabled && whatsappStatus.status === "conectado" && wpClient && settings.whatsapp.phoneNumber) {
+    const targetId = `${settings.whatsapp.phoneNumber.replace(/\D/g, "")}@c.us`;
+    wpClient.sendMessage(targetId, text).then(() => {
+      addLog("whatsapp", "success", "Alerta de assinatura enviado via WhatsApp.");
+    }).catch(err => {
+      addLog("whatsapp", "error", `Falha ao enviar alerta de assinatura: ${err.message}`);
+    });
+  }
+
+  sendDiscordInternalMessage(text.replace(/\*/g, ""));
+}
+
 // --- 5. PERIODIC BACKGROUND SYNC ---
 let syncTimer: NodeJS.Timeout | null = null;
 
@@ -1325,6 +1498,40 @@ function startGeneralReminderChecker() {
   }, 60000); // every 60 seconds
 }
 
+// --- 5e. SUBSCRIPTION EXPIRY CHECKER (every 60s) ---
+function startSubscriptionChecker() {
+  setInterval(async () => {
+    try {
+      const now = Date.now();
+      const rows = dbAll("SELECT * FROM subscriptions WHERE status = 'active'");
+
+      for (const subscription of rows) {
+        const expiresAt = new Date(subscription.expires_at).getTime();
+        if (!Number.isFinite(expiresAt)) continue;
+
+        const msUntilExpiry = expiresAt - now;
+        const updatedAt = new Date().toISOString();
+
+        if (msUntilExpiry <= 0 && !subscription.alert_due_sent) {
+          dbRun(
+            "UPDATE subscriptions SET alert_due_sent = 1, status = 'expired', updated_at = ? WHERE id = ?",
+            [updatedAt, subscription.id]
+          );
+          sendSubscriptionAlert({ ...subscription, status: "expired", alert_due_sent: 1, updated_at: updatedAt }, "due");
+        } else if (msUntilExpiry <= SUBSCRIPTION_DAY_MS && !subscription.alert_1d_sent) {
+          dbRun("UPDATE subscriptions SET alert_1d_sent = 1, updated_at = ? WHERE id = ?", [updatedAt, subscription.id]);
+          sendSubscriptionAlert({ ...subscription, alert_1d_sent: 1, updated_at: updatedAt }, "1d");
+        } else if (msUntilExpiry <= 3 * SUBSCRIPTION_DAY_MS && !subscription.alert_3d_sent) {
+          dbRun("UPDATE subscriptions SET alert_3d_sent = 1, updated_at = ? WHERE id = ?", [updatedAt, subscription.id]);
+          sendSubscriptionAlert({ ...subscription, alert_3d_sent: 1, updated_at: updatedAt }, "3d");
+        }
+      }
+    } catch (err: any) {
+      console.error("[Subscriptions] Erro no checker:", err);
+    }
+  }, 60000);
+}
+
 // Start core listeners
 startDiscordBot();
 startWhatsAppBot();
@@ -1332,6 +1539,7 @@ resetPeriodicSync();
 startWarrantyChecker();
 startAccountReminderChecker();
 startGeneralReminderChecker();
+startSubscriptionChecker();
 
 
 // --- 6. EXPRESS API ENDPOINTS ---
@@ -1442,6 +1650,218 @@ app.delete("/api/reminders/:id", (req, res) => {
     res.json({ success: true, reminders });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Subscription management for recurring Game Pass sales
+app.get("/api/subscriptions", (req, res) => {
+  try {
+    const platform = req.query.platform ? normalizeSubscriptionPlatform(req.query.platform) : undefined;
+    res.json({
+      subscriptions: getSubscriptions(platform),
+      summary: getSubscriptionSummary(platform),
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/subscriptions", (req, res) => {
+  try {
+    const platform = normalizeSubscriptionPlatform(req.body.platform);
+    const customerName = String(req.body.customerName || "").trim();
+    if (!customerName) {
+      return res.status(400).json({ error: "Informe o nome do cliente." });
+    }
+
+    const productName = String(req.body.productName || "Xbox Game Pass Ultimate 30 dias").trim();
+    const purchaseDate = parseSubscriptionDate(req.body.purchaseDate);
+    const startDate = parseSubscriptionDate(req.body.startDate, purchaseDate);
+    const durationDays = parseDurationDays(req.body.durationDays, 30);
+    const expiresAt = calculateSubscriptionExpiration(startDate, durationDays);
+    const nowIso = new Date().toISOString();
+    const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    dbRun(
+      `INSERT INTO subscriptions (
+        id, platform, customer_name, chat_link, product_name, purchase_date, start_date,
+        duration_days, expires_at, status, notes, alert_3d_sent, alert_1d_sent, alert_due_sent,
+        renewal_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        platform,
+        customerName,
+        String(req.body.chatLink || "").trim() || null,
+        productName,
+        purchaseDate.toISOString(),
+        startDate.toISOString(),
+        durationDays,
+        expiresAt.toISOString(),
+        "active",
+        String(req.body.notes || "").trim() || null,
+        0,
+        0,
+        0,
+        0,
+        nowIso,
+        nowIso,
+      ]
+    );
+
+    addLog("sistema", "success", `Assinatura ${getSubscriptionPlatformName(platform)} cadastrada para ${customerName}.`);
+    broadcastSubscriptionsRefresh(platform);
+    res.json({ success: true, subscriptions: getSubscriptions(platform), summary: getSubscriptionSummary(platform) });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put("/api/subscriptions/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const current = dbGet("SELECT * FROM subscriptions WHERE id = ?", [id]) as any;
+    if (!current) {
+      return res.status(404).json({ error: "Assinatura nao encontrada." });
+    }
+
+    const platform = normalizeSubscriptionPlatform(req.body.platform || current.platform);
+    const customerName = String(req.body.customerName || "").trim();
+    if (!customerName) {
+      return res.status(400).json({ error: "Informe o nome do cliente." });
+    }
+
+    const productName = String(req.body.productName || "Xbox Game Pass Ultimate 30 dias").trim();
+    const purchaseDate = parseSubscriptionDate(req.body.purchaseDate, new Date(current.purchase_date));
+    const startDate = parseSubscriptionDate(req.body.startDate, new Date(current.start_date));
+    const durationDays = parseDurationDays(req.body.durationDays, current.duration_days || 30);
+    const expiresAt = calculateSubscriptionExpiration(startDate, durationDays);
+    const status = String(req.body.status || current.status || "active");
+    const updatedAt = new Date().toISOString();
+    const scheduleChanged =
+      purchaseDate.toISOString() !== current.purchase_date ||
+      startDate.toISOString() !== current.start_date ||
+      durationDays !== Number(current.duration_days || 30) ||
+      expiresAt.toISOString() !== current.expires_at ||
+      status !== current.status;
+
+    dbRun(
+      `UPDATE subscriptions
+       SET platform = ?, customer_name = ?, chat_link = ?, product_name = ?, purchase_date = ?,
+           start_date = ?, duration_days = ?, expires_at = ?, status = ?, notes = ?,
+           alert_3d_sent = ?, alert_1d_sent = ?, alert_due_sent = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        platform,
+        customerName,
+        String(req.body.chatLink || "").trim() || null,
+        productName,
+        purchaseDate.toISOString(),
+        startDate.toISOString(),
+        durationDays,
+        expiresAt.toISOString(),
+        status,
+        String(req.body.notes || "").trim() || null,
+        scheduleChanged ? 0 : current.alert_3d_sent,
+        scheduleChanged ? 0 : current.alert_1d_sent,
+        scheduleChanged ? 0 : current.alert_due_sent,
+        updatedAt,
+        id,
+      ]
+    );
+
+    addLog("sistema", "success", `Assinatura de ${customerName} atualizada.`);
+    broadcastSubscriptionsRefresh(platform);
+    res.json({ success: true, subscriptions: getSubscriptions(platform), summary: getSubscriptionSummary(platform) });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put("/api/subscriptions/:id/renew", (req, res) => {
+  try {
+    const { id } = req.params;
+    const current = dbGet("SELECT * FROM subscriptions WHERE id = ?", [id]) as any;
+    if (!current) {
+      return res.status(404).json({ error: "Assinatura nao encontrada." });
+    }
+
+    const startDate = parseSubscriptionDate(req.body.startDate);
+    const durationDays = parseDurationDays(req.body.durationDays, current.duration_days || 30);
+    const expiresAt = calculateSubscriptionExpiration(startDate, durationDays);
+    const renewedAt = new Date().toISOString();
+    const renewalId = `ren_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    dbRun(
+      `INSERT INTO subscription_renewals (
+        id, subscription_id, previous_start_date, previous_expires_at,
+        new_start_date, new_expires_at, renewed_at, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        renewalId,
+        id,
+        current.start_date,
+        current.expires_at,
+        startDate.toISOString(),
+        expiresAt.toISOString(),
+        renewedAt,
+        String(req.body.note || "").trim() || null,
+      ]
+    );
+
+    dbRun(
+      `UPDATE subscriptions
+       SET start_date = ?, duration_days = ?, expires_at = ?, status = 'active',
+           alert_3d_sent = 0, alert_1d_sent = 0, alert_due_sent = 0,
+           renewal_count = COALESCE(renewal_count, 0) + 1, updated_at = ?
+       WHERE id = ?`,
+      [startDate.toISOString(), durationDays, expiresAt.toISOString(), renewedAt, id]
+    );
+
+    const platform = normalizeSubscriptionPlatform(current.platform);
+    addLog("sistema", "success", `Assinatura de ${current.customer_name} renovada por ${durationDays} dias.`);
+    broadcastSubscriptionsRefresh(platform);
+    res.json({ success: true, subscriptions: getSubscriptions(platform), summary: getSubscriptionSummary(platform) });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put("/api/subscriptions/:id/cancel", (req, res) => {
+  try {
+    const { id } = req.params;
+    const current = dbGet("SELECT * FROM subscriptions WHERE id = ?", [id]) as any;
+    if (!current) {
+      return res.status(404).json({ error: "Assinatura nao encontrada." });
+    }
+
+    const updatedAt = new Date().toISOString();
+    dbRun("UPDATE subscriptions SET status = 'canceled', updated_at = ? WHERE id = ?", [updatedAt, id]);
+    const platform = normalizeSubscriptionPlatform(current.platform);
+    addLog("sistema", "warn", `Assinatura de ${current.customer_name} cancelada.`);
+    broadcastSubscriptionsRefresh(platform);
+    res.json({ success: true, subscriptions: getSubscriptions(platform), summary: getSubscriptionSummary(platform) });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete("/api/subscriptions/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    const current = dbGet("SELECT * FROM subscriptions WHERE id = ?", [id]) as any;
+    if (!current) {
+      return res.status(404).json({ error: "Assinatura nao encontrada." });
+    }
+
+    dbRun("DELETE FROM subscription_renewals WHERE subscription_id = ?", [id]);
+    dbRun("DELETE FROM subscriptions WHERE id = ?", [id]);
+    const platform = normalizeSubscriptionPlatform(current.platform);
+    addLog("sistema", "warn", `Assinatura de ${current.customer_name} excluida.`);
+    broadcastSubscriptionsRefresh(platform);
+    res.json({ success: true, subscriptions: getSubscriptions(platform), summary: getSubscriptionSummary(platform) });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 
