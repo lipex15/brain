@@ -676,6 +676,31 @@ function clearWhatsAppStartupTimer() {
   }
 }
 
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function clearWhatsAppSessionFolder() {
+  const wsSessionDir = path.join(STORAGE_DIR, 'whatsapp-session');
+  if (!fs.existsSync(wsSessionDir)) return;
+
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      fs.rmSync(wsSessionDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 250,
+      });
+      return;
+    } catch (err: any) {
+      lastError = err;
+      await wait(450);
+    }
+  }
+
+  throw lastError || new Error("Nao foi possivel limpar a sessao antiga do WhatsApp.");
+}
+
 function stopWhatsAppBot(options: { log?: boolean; broadcast?: boolean } = {}) {
   const { log = true, broadcast = true } = options;
   whatsappBootId++;
@@ -1939,11 +1964,7 @@ app.post("/api/whatsapp/disconnect", async (req, res) => {
     }
     stopWhatsAppBot();
 
-    // Deleting the session auth directory forcefully
-    const wsSessionDir = path.join(STORAGE_DIR, 'whatsapp-session');
-    if (fs.existsSync(wsSessionDir)) {
-      fs.rmSync(wsSessionDir, { recursive: true, force: true });
-    }
+    await clearWhatsAppSessionFolder();
 
     // Automatically bring the QR code scanner back up if enabled
     if (settings.whatsapp.enabled) startWhatsAppBot(true);
@@ -1951,6 +1972,49 @@ app.post("/api/whatsapp/disconnect", async (req, res) => {
     res.json({ success: true, message: "Sessão desconectada. Você já pode ler um novo QR Code." });
   } catch (err: any) {
     res.status(500).json({ success: false, message: `Erro ao desconectar: ${err.message}` });
+  }
+});
+
+app.post("/api/whatsapp/reconnect", async (req, res) => {
+  addLog("whatsapp", "warn", "Solicitada reconexao do WhatsApp para gerar um novo QR Code.");
+
+  try {
+    if (!settings.whatsapp.enabled) {
+      whatsappStatus = {
+        status: 'desconectado',
+        qrCode: null,
+        statusText: "Ative o WhatsApp e salve as configuracoes antes de conectar.",
+      };
+      broadcastEvent("status_whatsapp", whatsappStatus);
+      return res.json({ success: false, message: whatsappStatus.statusText, status: whatsappStatus });
+    }
+
+    stopWhatsAppBot({ log: false, broadcast: false });
+    whatsappStatus = {
+      status: 'conectando',
+      qrCode: null,
+      statusText: "Preparando novo QR Code...",
+    };
+    broadcastEvent("status_whatsapp", whatsappStatus);
+
+    await wait(800);
+    await clearWhatsAppSessionFolder();
+
+    startWhatsAppBot(true);
+    res.json({
+      success: true,
+      message: "Reconexao iniciada. O QR Code deve aparecer em alguns segundos.",
+      status: whatsappStatus,
+    });
+  } catch (err: any) {
+    whatsappStatus = {
+      status: 'desconectado',
+      qrCode: null,
+      statusText: `Falha ao preparar QR: ${err.message}`,
+    };
+    addLog("whatsapp", "error", whatsappStatus.statusText);
+    broadcastEvent("status_whatsapp", whatsappStatus);
+    res.status(500).json({ success: false, message: whatsappStatus.statusText, status: whatsappStatus });
   }
 });
 

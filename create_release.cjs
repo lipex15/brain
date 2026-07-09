@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Botao de Lembretes abre direto a aba Meus lembretes nas configuracoes\n- Pareamento do WhatsApp ganhou acao clara de Conectar / Reconectar\n- Reconexao limpa sessao quebrada e busca o QR Code novamente`,
+        body: `deathStuffs ${tag}\n\n- Reconectar WhatsApp agora usa uma rota propria para preparar novo QR Code\n- Limpeza de sessao do WhatsApp ganhou tentativas extras no Windows\n- A tela mostra o erro real se o QR nao puder ser preparado`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

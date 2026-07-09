@@ -41,6 +41,7 @@ interface SettingsPanelProps {
   onReset: () => void;
   onClearDatabase: () => void;
   onDisconnectWhatsApp: () => Promise<void>;
+  onReconnectWhatsApp: () => Promise<{ success: boolean; message: string }>;
   onTriggerScanSim?: () => void;
   initialTab?: TabType;
   tabRequestKey?: number;
@@ -61,6 +62,7 @@ export default function SettingsPanel({
   onReset,
   onClearDatabase,
   onDisconnectWhatsApp,
+  onReconnectWhatsApp,
   onTriggerScanSim,
   initialTab,
   tabRequestKey,
@@ -224,9 +226,9 @@ export default function SettingsPanel({
       return;
     }
 
-    await onDisconnectWhatsApp();
+    const result = await onReconnectWhatsApp();
     setWhatsappTesting(false);
-    setWhatsappTestResult({ success: true, message: 'Reconexão iniciada. Aguarde o QR Code aparecer abaixo.' });
+    setWhatsappTestResult(result);
     setTimeout(() => setWhatsappTestResult(null), 6000);
   };
 

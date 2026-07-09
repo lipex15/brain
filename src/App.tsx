@@ -578,6 +578,21 @@ export default function App() {
     }
   };
 
+  const handleReconnectWhatsApp = async () => {
+    try {
+      const res = await fetch('/api/whatsapp/reconnect', { method: 'POST' });
+      const result = await res.json();
+      fetchSystemStatus();
+      setTimeout(fetchSystemStatus, 1000);
+      setTimeout(fetchSystemStatus, 2500);
+      setTimeout(fetchSystemStatus, 6000);
+      setTimeout(fetchSystemStatus, 12000);
+      return result;
+    } catch (e) {
+      return { success: false, message: 'Erro ao iniciar a reconexão do WhatsApp.' };
+    }
+  };
+
   const handleTriggerWhatsAppScanSim = async () => {
     try {
       await fetch('/api/whatsapp/scan-sim', { method: 'POST' });
@@ -1491,6 +1506,7 @@ export default function App() {
               onTestDiscord={handleTestDiscord}
               onTestWhatsApp={handleTestWhatsApp}
               onDisconnectWhatsApp={handleDisconnectWhatsApp}
+              onReconnectWhatsApp={handleReconnectWhatsApp}
               onReset={handleResetSettings}
               onClearDatabase={handleClearDatabase}
               onTriggerScanSim={handleTriggerWhatsAppScanSim}
