@@ -16,11 +16,15 @@ if (!token) {
 }
 
 const repo = 'lipex15/brain';
+const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/vnd.github+json'
+};
 
 async function upload() {
     console.log('Fetching release for v' + version);
     const releaseRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/v${version}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers
     });
 
     if (!releaseRes.ok) {
@@ -34,12 +38,16 @@ async function upload() {
     const fileName = `deathStuffs-Setup-${version}.exe`;
 
     // Find and delete any existing asset with the same name (prevents 422 already_exists block)
-    const assetsRes = await fetch(release.assets_url, { headers: { 'Authorization': `Bearer ${token}` } });
+    const assetsRes = await fetch(release.assets_url, { headers });
     const assets = await assetsRes.json();
-    const existingExe = assets.find(a => a.name === fileName);
-    if (existingExe) {
-        console.log(`Found existing phantom asset ${existingExe.id}. Deleting...`);
-        await fetch(existingExe.url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+    const existingExeAssets = assets.filter(a => a.name === fileName);
+    for (const existingExe of existingExeAssets) {
+        console.log(`Found existing asset ${existingExe.id}. Deleting...`);
+        const deleteRes = await fetch(existingExe.url, { method: 'DELETE', headers });
+        if (!deleteRes.ok) {
+            console.error('Failed to delete existing asset', existingExe.id, await deleteRes.text());
+            process.exit(1);
+        }
         console.log('Deleted existing asset.');
     }
 
@@ -68,4 +76,7 @@ async function upload() {
     console.log('Successfully uploaded EXE!');
 }
 
-upload().catch(console.error);
+upload().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});

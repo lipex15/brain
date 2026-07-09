@@ -11,7 +11,7 @@ import { Client as DiscordClient, GatewayIntentBits, TextChannel, Message } from
 import qrcode from "qrcode";
 import pkg from "whatsapp-web.js";
 const { Client: WhatsAppClient, LocalAuth } = pkg;
-import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory } from "./src/types.js";
+import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, type AppReminder } from "./src/types.js";
 import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase } from "./database.js";
 import cors from "cors";
 import multer from "multer";
@@ -895,7 +895,7 @@ function sendWarrantyAlert(item: any, productName: string) {
     warrantyExpiresAt: item.warranty_expires_at,
   });
 
-  addLog("sistema", "warn", `⏰ GARANTIA EXPIRANDO: Conta "${item.login || item.content}" de "${productName}" vence em ~20 minutos!`);
+  addLog("sistema", "warn", `GARANTIA LZT EXPIRANDO: Conta "${item.login || item.content}" de "${productName}" vence em ~20 minutos!`);
 
   // WhatsApp self-message (bypasses priority/platform filters — this is an internal alert)
   if (!settings.whatsapp.enabled || whatsappStatus.status !== 'conectado' || !wpClient) return;
@@ -905,19 +905,91 @@ function sendWarrantyAlert(item: any, productName: string) {
   const expiresAt = new Date(item.warranty_expires_at);
   const formatted = expiresAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false });
 
-  let text = `⏰ *GARANTIA EXPIRANDO EM ~20 MINUTOS!* ⏰\n\n`;
+  let text = `⏰ *GARANTIA LZT ACABANDO*\n\n`;
+  text += `⚠️ Faltam aproximadamente *20 minutos* para a garantia expirar.\n\n`;
   text += `🎮 *Produto:* ${productName}\n`;
   text += `👤 *Login:* ${item.login || item.content || 'N/A'}\n`;
-  if (item.senha) text += `🔒 *Senha:* ${item.senha}\n`;
+  if (item.senha) text += `🔐 *Senha:* ${item.senha}\n`;
   if (item.email) text += `📧 *E-mail:* ${item.email}\n`;
-  text += `⏱ *Expira às:* ${formatted}\n\n`;
-  text += `🔗 Acesse o LZT.market agora e verifique se a conta está funcionando antes de perder a garantia!`;
+  text += `⏱️ *Expira em:* ${formatted}\n\n`;
+  text += `✅ Abra o LZT.market e confira se a conta está funcionando antes de perder a garantia.`;
 
   const targetId = `${phone.replace(/\D/g, '')}@c.us`;
   wpClient.sendMessage(targetId, text).then(() => {
     addLog("whatsapp", "success", `Alerta de garantia enviado via WhatsApp para ${phone}.`);
   }).catch(err => {
     addLog("whatsapp", "error", `Falha ao enviar alerta de garantia: ${err.message}`);
+  });
+}
+
+// --- ACCOUNT REMINDER ALERT: send a personal reminder tied to an inventory item ---
+function sendAccountReminderAlert(item: any, productName: string) {
+  const reminderNote = item.reminder_note || "Sem anotação";
+  const dueAt = item.reminder_at ? new Date(item.reminder_at) : new Date();
+  const formatted = dueAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false });
+
+  broadcastEvent("account_reminder_alert", {
+    itemId: item.id,
+    productName,
+    login: item.login || item.content || '(sem login)',
+    reminderAt: item.reminder_at,
+    reminderNote,
+  });
+
+  addLog("sistema", "warn", `LEMBRETE: Conta "${item.login || item.content}" de "${productName}" - ${reminderNote}`);
+
+  // WhatsApp self-message, same internal-alert pattern used by warranty alerts.
+  if (!settings.whatsapp.enabled || whatsappStatus.status !== 'conectado' || !wpClient) return;
+  const phone = settings.whatsapp.phoneNumber;
+  if (!phone) return;
+
+  let text = `🔔 *ALERTA DE CONTA SALVA*\n\n`;
+  text += `Você pediu para ser lembrado sobre esta conta.\n\n`;
+  text += `🎮 *Produto:* ${productName}\n`;
+  text += `👤 *Login:* ${item.login || item.content || 'N/A'}\n`;
+  if (item.senha) text += `🔐 *Senha:* ${item.senha}\n`;
+  if (item.email) text += `📧 *E-mail:* ${item.email}\n`;
+  text += `🕒 *Programado para:* ${formatted}\n`;
+  text += `📝 *Anotação:* ${reminderNote}\n\n`;
+  text += `Abra o deathStuffs brain para conferir essa conta.`;
+
+  const targetId = `${phone.replace(/\D/g, '')}@c.us`;
+  wpClient.sendMessage(targetId, text).then(() => {
+    addLog("whatsapp", "success", `Lembrete de conta enviado via WhatsApp para ${phone}.`);
+  }).catch(err => {
+    addLog("whatsapp", "error", `Falha ao enviar lembrete de conta: ${err.message}`);
+  });
+}
+
+// --- GENERAL REMINDER ALERT: personal notes from the main panel ---
+function sendGeneralReminderAlert(reminder: any) {
+  const reminderNote = reminder.note || "Sem anotação";
+  const dueAt = reminder.remind_at ? new Date(reminder.remind_at) : new Date();
+  const formatted = dueAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false });
+
+  broadcastEvent("general_reminder_alert", {
+    id: reminder.id,
+    note: reminderNote,
+    remindAt: reminder.remind_at,
+  });
+  broadcastEvent("reminders_refresh", getActiveReminders());
+
+  addLog("sistema", "warn", `LEMBRETE GERAL: ${reminderNote}`);
+
+  if (!settings.whatsapp.enabled || whatsappStatus.status !== 'conectado' || !wpClient) return;
+  const phone = settings.whatsapp.phoneNumber;
+  if (!phone) return;
+
+  let text = `🧠 *LEMBRETE DO PAINEL*\n\n`;
+  text += `📝 *Anotação:*\n${reminderNote}\n\n`;
+  text += `🕒 *Programado para:* ${formatted}\n\n`;
+  text += `Abra o deathStuffs brain quando puder.`;
+
+  const targetId = `${phone.replace(/\D/g, '')}@c.us`;
+  wpClient.sendMessage(targetId, text).then(() => {
+    addLog("whatsapp", "success", `Lembrete geral enviado via WhatsApp para ${phone}.`);
+  }).catch(err => {
+    addLog("whatsapp", "error", `Falha ao enviar lembrete geral: ${err.message}`);
   });
 }
 
@@ -968,11 +1040,65 @@ function startWarrantyChecker() {
   }, 60000); // every 60 seconds
 }
 
+// --- 5c. ACCOUNT REMINDER CHECKER (every 60s) ---
+function startAccountReminderChecker() {
+  setInterval(async () => {
+    try {
+      const nowIso = new Date().toISOString();
+
+      const items = dbAll(
+        `SELECT items.*, products.name as product_name
+         FROM items
+         JOIN products ON items.product_id = products.id
+         WHERE items.reminder_at IS NOT NULL
+           AND items.reminder_at <= ?
+           AND (items.reminder_alert_sent = 0 OR items.reminder_alert_sent IS NULL)`,
+        [nowIso]
+      );
+
+      for (const item of items) {
+        dbRun("UPDATE items SET reminder_alert_sent = 1 WHERE id = ?", [item.id]);
+        sendAccountReminderAlert(item, item.product_name);
+      }
+    } catch (err: any) {
+      console.error("[Reminder] Erro no checker:", err);
+    }
+  }, 60000); // every 60 seconds
+}
+
+// --- 5d. GENERAL REMINDER CHECKER (every 60s) ---
+function startGeneralReminderChecker() {
+  setInterval(async () => {
+    try {
+      const nowIso = new Date().toISOString();
+
+      const reminders = dbAll(
+        `SELECT *
+         FROM reminders
+         WHERE remind_at IS NOT NULL
+           AND remind_at <= ?
+           AND (alert_sent = 0 OR alert_sent IS NULL)
+           AND completed_at IS NULL`,
+        [nowIso]
+      );
+
+      for (const reminder of reminders) {
+        dbRun("UPDATE reminders SET alert_sent = 1 WHERE id = ?", [reminder.id]);
+        sendGeneralReminderAlert(reminder);
+      }
+    } catch (err: any) {
+      console.error("[GeneralReminder] Erro no checker:", err);
+    }
+  }, 60000); // every 60 seconds
+}
+
 // Start core listeners
 startDiscordBot();
 startWhatsAppBot();
 resetPeriodicSync();
 startWarrantyChecker();
+startAccountReminderChecker();
+startGeneralReminderChecker();
 
 
 // --- 6. EXPRESS API ENDPOINTS ---
@@ -997,6 +1123,93 @@ app.get("/api/events", (req, res) => {
     sseClients = sseClients.filter((client) => client !== res);
     addLog("sistema", "info", "Painel desconectado do fluxo de eventos.");
   });
+});
+
+function mapReminder(row: any): AppReminder {
+  return {
+    id: row.id,
+    note: row.note,
+    remindAt: row.remind_at,
+    alertSent: !!row.alert_sent,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
+}
+
+function getActiveReminders(): AppReminder[] {
+  return dbAll(`
+    SELECT *
+    FROM reminders
+    WHERE completed_at IS NULL
+    ORDER BY
+      CASE WHEN remind_at IS NULL THEN 1 ELSE 0 END,
+      remind_at ASC,
+      created_at DESC
+  `).map(mapReminder);
+}
+
+// General reminder notes CRUD
+app.get("/api/reminders", (req, res) => {
+  try {
+    res.json(getActiveReminders());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/reminders", (req, res) => {
+  try {
+    const { note, reminderHours } = req.body;
+    const cleanNote = String(note || '').trim();
+    if (!cleanNote) {
+      return res.status(400).json({ error: "Escreva uma anotação para salvar o lembrete." });
+    }
+
+    const parsedHours = reminderHours !== undefined && reminderHours !== null
+      ? parseFloat(String(reminderHours).replace(',', '.'))
+      : 0;
+    const remindAt = Number.isFinite(parsedHours) && parsedHours > 0
+      ? new Date(Date.now() + parsedHours * 60 * 60 * 1000).toISOString()
+      : null;
+    const reminderId = `rem_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const createdAt = new Date().toISOString();
+
+    dbRun(
+      "INSERT INTO reminders (id, note, remind_at, alert_sent, created_at) VALUES (?, ?, ?, ?, ?)",
+      [reminderId, cleanNote, remindAt, 0, createdAt]
+    );
+
+    const reminders = getActiveReminders();
+    broadcastEvent("reminders_refresh", reminders);
+    addLog("sistema", "success", remindAt ? `Lembrete geral agendado para ${new Date(remindAt).toLocaleString('pt-BR')}.` : "Anotação salva no painel.");
+    res.json({ success: true, reminders });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/reminders/:id/complete", (req, res) => {
+  try {
+    const { id } = req.params;
+    dbRun("UPDATE reminders SET completed_at = ? WHERE id = ?", [new Date().toISOString(), id]);
+    const reminders = getActiveReminders();
+    broadcastEvent("reminders_refresh", reminders);
+    res.json({ success: true, reminders });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/reminders/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    dbRun("DELETE FROM reminders WHERE id = ?", [id]);
+    const reminders = getActiveReminders();
+    broadcastEvent("reminders_refresh", reminders);
+    res.json({ success: true, reminders });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // App Settings CRUD
@@ -1380,7 +1593,10 @@ app.get("/api/stock/products/:id/items", async (req, res) => {
     const items = await dbAll(`
       SELECT *, 
              warranty_expires_at AS warrantyExpiresAt, 
-             warranty_alert_sent AS warrantyAlertSent 
+             warranty_alert_sent AS warrantyAlertSent,
+             reminder_at AS reminderAt,
+             reminder_note AS reminderNote,
+             reminder_alert_sent AS reminderAlertSent
       FROM items 
       WHERE product_id = ? 
       ORDER BY status ASC, sold_at DESC
@@ -1416,12 +1632,16 @@ app.get("/api/stock/warranties/active", async (req, res) => {
 app.post("/api/stock/products/:id/items", async (req, res) => {
   try {
     const { id } = req.params;
-    const { rawItems, login, senha, email, senhaEmail, observacao, dataNascimento, perguntaSecreta, respostaSecreta, paisCadastro, warrantyHours } = req.body;
+    const { rawItems, login, senha, email, senhaEmail, observacao, dataNascimento, perguntaSecreta, respostaSecreta, paisCadastro, warrantyHours, reminderHours, reminderNote } = req.body;
 
     // Compute warranty expiry timestamp if warrantyHours is provided
     const warrantyExpiresAt = warrantyHours && parseFloat(warrantyHours) > 0
       ? new Date(Date.now() + parseFloat(warrantyHours) * 60 * 60 * 1000).toISOString()
       : null;
+    const reminderAt = reminderHours && parseFloat(reminderHours) > 0
+      ? new Date(Date.now() + parseFloat(reminderHours) * 60 * 60 * 1000).toISOString()
+      : null;
+    const reminderNoteText = reminderAt ? String(reminderNote || '').trim() : null;
 
     if (rawItems && typeof rawItems === "string") {
       const itemLines = rawItems.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
@@ -1452,9 +1672,9 @@ app.post("/api/stock/products/:id/items", async (req, res) => {
         }
 
         dbRun(
-          `INSERT INTO items (id, product_id, content, status, login, senha, email, senhaEmail, warranty_expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [itemId, id, line, 'disponivel', loginVal, senhaVal, emailVal, senhaEmailVal, warrantyExpiresAt]
+          `INSERT INTO items (id, product_id, content, status, login, senha, email, senhaEmail, warranty_expires_at, reminder_at, reminder_note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [itemId, id, line, 'disponivel', loginVal, senhaVal, emailVal, senhaEmailVal, warrantyExpiresAt, reminderAt, reminderNoteText]
         );
       }
 
@@ -1468,9 +1688,9 @@ app.post("/api/stock/products/:id/items", async (req, res) => {
       if (observacao) content += ` | Obs: ${observacao}`;
 
       dbRun(
-        `INSERT INTO items (id, product_id, content, status, login, senha, email, senhaEmail, observacao, dataNascimento, perguntaSecreta, respostaSecreta, paisCadastro, warranty_expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [itemId, id, content, 'disponivel', login || null, senha || null, email || null, senhaEmail || null, observacao || null, dataNascimento || null, perguntaSecreta || null, respostaSecreta || null, paisCadastro || null, warrantyExpiresAt]
+        `INSERT INTO items (id, product_id, content, status, login, senha, email, senhaEmail, observacao, dataNascimento, perguntaSecreta, respostaSecreta, paisCadastro, warranty_expires_at, reminder_at, reminder_note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [itemId, id, content, 'disponivel', login || null, senha || null, email || null, senhaEmail || null, observacao || null, dataNascimento || null, perguntaSecreta || null, respostaSecreta || null, paisCadastro || null, warrantyExpiresAt, reminderAt, reminderNoteText]
       );
 
       const product = await dbGet("SELECT name FROM products WHERE id = ?", [id]) as any;

@@ -63,6 +63,7 @@ export interface StockProduct {
   availableCount?: number;
   totalCount?: number;
   activeWarrantyCount?: number;
+  activeReminderCount?: number;
 }
 
 export interface StockInventoryItem {
@@ -88,6 +89,20 @@ export interface StockInventoryItem {
   // Warranty tracking (LZT guarantee)
   warrantyExpiresAt?: string;  // ISO timestamp or undefined
   warrantyAlertSent?: boolean;
+
+  // Personal reminder tracking
+  reminderAt?: string;
+  reminderNote?: string;
+  reminderAlertSent?: boolean;
+}
+
+export interface AppReminder {
+  id: string;
+  note: string;
+  remindAt?: string | null;
+  alertSent?: boolean;
+  createdAt: string;
+  completedAt?: string | null;
 }
 
 export interface UpdaterState {

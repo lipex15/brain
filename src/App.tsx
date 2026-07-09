@@ -70,7 +70,7 @@ const DeathstuffsLogo = () => (
     <line x1="53" y1="61" x2="53" y2="67" stroke="#0f172a" strokeWidth="1" />
   </svg>
 );
-import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, NotificationStatus, ResolutionStatus } from './types';
+import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, NotificationStatus, ResolutionStatus, type AppReminder } from './types';
 import NotificationCard from './components/NotificationCard';
 import SettingsPanel from './components/SettingsPanel';
 import WhatsAppConnector from './components/WhatsAppConnector';
@@ -126,20 +126,55 @@ export default function App() {
 
   // Warranty Emergency Alert State
   const [activeWarrantyAlerts, setActiveWarrantyAlerts] = useState<any[]>([]);
+  const [activeReminderAlerts, setActiveReminderAlerts] = useState<any[]>([]);
+  const [activeGeneralReminderAlerts, setActiveGeneralReminderAlerts] = useState<any[]>([]);
   const [activeWarranties, setActiveWarranties] = useState<any[]>([]);
   const [forceWarrantyFilter, setForceWarrantyFilter] = useState(false);
+
+  // General reminder notes
+  const [reminders, setReminders] = useState<AppReminder[]>([]);
+  const [reminderDraft, setReminderDraft] = useState('');
+  const [scheduleReminder, setScheduleReminder] = useState(false);
+  const [generalReminderAmount, setGeneralReminderAmount] = useState('1');
+  const [generalReminderUnit, setGeneralReminderUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
+  const [savingReminder, setSavingReminder] = useState(false);
 
   // Global Stock Cache for Notification Matching
   const [stockProducts, setStockProducts] = useState<any[]>([]);
   const [globalStockSearch, setGlobalStockSearch] = useState<string>('');
 
   // --- AUDIO SYNTHESIS ENGINE ---
-  // Uses Web Audio API to create a crystal-clear cash-register chime or synth ring.
+  // Uses Web Audio API to create distinct offline alert signatures.
   // Completely offline-ready and doesn't rely on asset files.
+  const createAudioContext = () => new (window.AudioContext || (window as any).webkitAudioContext)();
+
+  const playTone = (
+    audioCtx: AudioContext,
+    frequency: number,
+    startOffset: number,
+    duration: number,
+    type: OscillatorType,
+    volume: number
+  ) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const startAt = audioCtx.currentTime + startOffset;
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, startAt);
+    gain.gain.setValueAtTime(volume, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.005, startAt + duration);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(startAt);
+    osc.stop(startAt + duration);
+  };
+
   const playAlertSound = () => {
     if (soundMuted || !settings.general.soundEnabled) return;
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioCtx = createAudioContext();
 
       // Tone 1: Base high bell (F#5)
       const osc1 = audioCtx.createOscillator();
@@ -175,26 +210,33 @@ export default function App() {
     }
   };
 
-  const playEmergencySound = () => {
+  const playWarrantySound = () => {
     if (soundMuted || !settings.general.soundEnabled) return;
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
+      const audioCtx = createAudioContext();
+      playTone(audioCtx, 440, 0.00, 0.18, 'square', 0.24);
+      playTone(audioCtx, 1046.5, 0.20, 0.18, 'square', 0.22);
+      playTone(audioCtx, 440, 0.40, 0.24, 'sawtooth', 0.20);
+    } catch (e) { }
+  };
 
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-      osc.frequency.setValueAtTime(1200, audioCtx.currentTime + 0.2);
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.4);
+  const playGeneralReminderSound = () => {
+    if (soundMuted || !settings.general.soundEnabled) return;
+    try {
+      const audioCtx = createAudioContext();
+      playTone(audioCtx, 659.25, 0.00, 0.22, 'sine', 0.16);
+      playTone(audioCtx, 523.25, 0.24, 0.24, 'sine', 0.14);
+      playTone(audioCtx, 392.00, 0.50, 0.36, 'sine', 0.12);
+    } catch (e) { }
+  };
 
-      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.6);
+  const playAccountAlertSound = () => {
+    if (soundMuted || !settings.general.soundEnabled) return;
+    try {
+      const audioCtx = createAudioContext();
+      playTone(audioCtx, 329.63, 0.00, 0.16, 'triangle', 0.16);
+      playTone(audioCtx, 493.88, 0.13, 0.16, 'triangle', 0.15);
+      playTone(audioCtx, 659.25, 0.26, 0.28, 'triangle', 0.14);
     } catch (e) { }
   };
 
@@ -206,6 +248,7 @@ export default function App() {
     fetchSystemStatus();
     fetchActiveWarranties();
     fetchGlobalStock();
+    fetchReminders();
 
     // Listen to local stock updates
     const handleStockRefresh = () => fetchGlobalStock();
@@ -241,6 +284,8 @@ export default function App() {
         } else if (type === 'stock_refresh') {
           window.dispatchEvent(new Event('stock_refresh'));
           fetchActiveWarranties();
+        } else if (type === 'reminders_refresh') {
+          setReminders(data);
         } else if (type === 'notification_new') {
           setNotifications((prev) => [data, ...prev]);
           playAlertSound();
@@ -259,11 +304,36 @@ export default function App() {
             if (prev.find(a => a.itemId === data.itemId)) return prev;
             return [...prev, data];
           });
-          playEmergencySound();
+          playWarrantySound();
           fetchActiveWarranties();
           if (Notification.permission === 'granted') {
             new Notification(`GARANTIA EXPIRANDO: ${data.productName}`, {
               body: `A conta ${data.login} expirará em breve! Verifique no LZT.`,
+              requireInteraction: true
+            });
+          }
+        } else if (type === 'general_reminder_alert') {
+          setActiveGeneralReminderAlerts(prev => {
+            if (prev.find(a => a.id === data.id)) return prev;
+            return [...prev, data];
+          });
+          playGeneralReminderSound();
+          fetchReminders();
+          if (Notification.permission === 'granted') {
+            new Notification('LEMBRETE DO PAINEL', {
+              body: data.note || 'Você tem um lembrete pendente.',
+              requireInteraction: true
+            });
+          }
+        } else if (type === 'account_reminder_alert') {
+          setActiveReminderAlerts(prev => {
+            if (prev.find(a => a.itemId === data.itemId)) return prev;
+            return [...prev, data];
+          });
+          playAccountAlertSound();
+          if (Notification.permission === 'granted') {
+            new Notification(`LEMBRETE: ${data.productName}`, {
+              body: `${data.login} - ${data.reminderNote || 'Verificar conta'}`,
               requireInteraction: true
             });
           }
@@ -306,6 +376,87 @@ export default function App() {
   }, [settings.general.theme]);
 
   // --- API BACKEND COMMUNICATORS ---
+  const getGeneralReminderHours = () => {
+    if (!scheduleReminder) return undefined;
+    const amount = parseFloat(generalReminderAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) return undefined;
+    if (generalReminderUnit === 'minutes') return amount / 60;
+    if (generalReminderUnit === 'days') return amount * 24;
+    return amount;
+  };
+
+  const fetchReminders = async () => {
+    try {
+      const res = await fetch('/api/reminders');
+      if (res.ok) setReminders(await res.json());
+    } catch (e) {
+      console.error('Error fetching reminders:', e);
+    }
+  };
+
+  const handleCreateReminder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reminderDraft.trim()) return;
+    setSavingReminder(true);
+    try {
+      const reminderHours = getGeneralReminderHours();
+      const res = await fetch('/api/reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note: reminderDraft,
+          reminderHours
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReminders(data.reminders || []);
+        setReminderDraft('');
+        setScheduleReminder(false);
+        setGeneralReminderAmount('1');
+        setGeneralReminderUnit('hours');
+      }
+    } catch (e) {
+      console.error('Error creating reminder:', e);
+    } finally {
+      setSavingReminder(false);
+    }
+  };
+
+  const handleCompleteReminder = async (id: string) => {
+    try {
+      const res = await fetch(`/api/reminders/${id}/complete`, { method: 'PUT' });
+      if (res.ok) {
+        const data = await res.json();
+        setReminders(data.reminders || []);
+      }
+    } catch (e) {
+      console.error('Error completing reminder:', e);
+    }
+  };
+
+  const handleDeleteReminder = async (id: string) => {
+    try {
+      const res = await fetch(`/api/reminders/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        const data = await res.json();
+        setReminders(data.reminders || []);
+      }
+    } catch (e) {
+      console.error('Error deleting reminder:', e);
+    }
+  };
+
+  const formatReminderDate = (dateString?: string | null) => {
+    if (!dateString) return 'Sem alerta';
+    return new Date(dateString).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   const fetchActiveWarranties = async () => {
     try {
       const res = await fetch('/api/stock/warranties/active');
@@ -995,6 +1146,127 @@ export default function App() {
               </div>
             </div>
 
+            {/* General reminders notebook */}
+            <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xs">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Bloco de Lembretes</h2>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{reminders.length} {reminders.length === 1 ? 'bilhete ativo' : 'bilhetes ativos'}</p>
+                  </div>
+                </div>
+                {reminders.some(r => r.remindAt && !r.alertSent) && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50 px-2.5 py-1 rounded-lg">
+                    <Bell className="w-3 h-3" />
+                    Agendado
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
+                <form onSubmit={handleCreateReminder} className="space-y-3">
+                  <textarea
+                    value={reminderDraft}
+                    onChange={(e) => setReminderDraft(e.target.value)}
+                    rows={4}
+                    placeholder="Escrever anotação..."
+                    className="w-full text-sm p-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <div
+                        onClick={() => setScheduleReminder(!scheduleReminder)}
+                        className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative cursor-pointer ${scheduleReminder ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-700'}`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${scheduleReminder ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </div>
+                      <Bell className={`w-4 h-4 ${scheduleReminder ? 'text-indigo-500' : 'text-slate-400'}`} />
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Agendar alerta</span>
+                    </label>
+
+                    {scheduleReminder && (
+                      <div className="grid grid-cols-[1fr_120px] gap-2 w-full md:w-[260px]">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.01"
+                          value={generalReminderAmount}
+                          onChange={(e) => setGeneralReminderAmount(e.target.value)}
+                          className="text-xs px-2.5 py-2 border border-indigo-200 dark:border-indigo-900/50 rounded-lg bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                        <select
+                          value={generalReminderUnit}
+                          onChange={(e) => setGeneralReminderUnit(e.target.value as 'minutes' | 'hours' | 'days')}
+                          className="text-xs px-2.5 py-2 border border-indigo-200 dark:border-indigo-900/50 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-800 dark:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        >
+                          <option value="minutes">Minutos</option>
+                          <option value="hours">Horas</option>
+                          <option value="days">Dias</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={!reminderDraft.trim() || savingReminder}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </form>
+
+                <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                  <div className="max-h-[220px] overflow-y-auto custom-scrollbar divide-y divide-slate-100 dark:divide-slate-800/70">
+                    {reminders.length === 0 ? (
+                      <div className="p-6 text-center text-xs font-semibold text-slate-400">Nenhum bilhete ativo</div>
+                    ) : (
+                      reminders.map((reminder) => {
+                        const due = reminder.remindAt ? new Date(reminder.remindAt).getTime() <= Date.now() : false;
+                        return (
+                          <div key={reminder.id} className={`p-3 ${due && !reminder.alertSent ? 'bg-rose-50/70 dark:bg-rose-950/20' : 'bg-white dark:bg-slate-900'}`}>
+                            <div className="flex items-start gap-3">
+                              <div className={`mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center ${reminder.remindAt ? 'bg-indigo-500/10 text-indigo-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                {reminder.remindAt ? <Bell className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">{reminder.note}</p>
+                                <p className={`text-[10px] font-bold mt-1 ${due && !reminder.alertSent ? 'text-rose-500' : reminder.alertSent ? 'text-slate-400' : 'text-indigo-500'}`}>
+                                  {reminder.alertSent ? 'Alerta enviado' : formatReminderDate(reminder.remindAt)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompleteReminder(reminder.id)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                                  title="Marcar como feito"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteReminder(reminder.id)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+
             {/* 2. SEARCH, FILTERS & ACTION CONTROLS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xs space-y-3">
               <div className="flex flex-col md:flex-row gap-3">
@@ -1307,6 +1579,121 @@ export default function App() {
                     Estou Ciente — Fechar Alerta
                   </button>
                   <p className="text-[9px] text-center text-slate-400 font-medium">Acesse o painel do LZT e confirme se a conta permanece ativa.</p>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- GENERAL REMINDER MODALS --- */}
+      <AnimatePresence>
+        {activeGeneralReminderAlerts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[101] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+          >
+            {activeGeneralReminderAlerts.map(alert => (
+              <motion.div
+                key={alert.id}
+                initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                className="bg-white dark:bg-slate-900 border-2 border-indigo-500 rounded-2xl p-6 shadow-2xl max-w-md w-full relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500 animate-pulse" />
+
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 flex-shrink-0 bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 rounded-full flex items-center justify-center border-4 border-white dark:border-slate-800 shadow-sm">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Lembrete do Painel</h2>
+                    <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mt-1 leading-tight">
+                      Um bilhete agendado chegou ao horário marcado.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <span className="text-xs font-bold text-slate-500">Anotação</span>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 whitespace-pre-wrap mt-1">
+                    {alert.note || 'Sem anotação'}
+                  </p>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      setActiveGeneralReminderAlerts(prev => prev.filter(a => a.id !== alert.id));
+                      handleCompleteReminder(alert.id);
+                    }}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors shadow-lg shadow-indigo-600/20 cursor-pointer"
+                  >
+                    Marcar como Feito
+                  </button>
+                  <button
+                    onClick={() => setActiveGeneralReminderAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- ACCOUNT REMINDER MODALS --- */}
+      <AnimatePresence>
+        {activeReminderAlerts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[101] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4"
+          >
+            {activeReminderAlerts.map(alert => (
+              <motion.div
+                key={alert.itemId}
+                initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                className="bg-white dark:bg-slate-900 border-2 border-indigo-500 rounded-2xl p-6 shadow-2xl max-w-md w-full relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500 animate-pulse" />
+
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 flex-shrink-0 bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 rounded-full flex items-center justify-center border-4 border-white dark:border-slate-800 shadow-sm">
+                    <Bell className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Alerta de Conta</h2>
+                    <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mt-1 leading-tight">
+                      Você pediu para ser alertado sobre esta conta.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-2">
+                    <span className="text-xs font-bold text-slate-500">Produto</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{alert.productName}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-2">
+                    <span className="text-xs font-bold text-slate-500">Conta / Login</span>
+                    <span className="text-xs font-bold font-mono bg-slate-200 dark:bg-slate-800 rounded px-1 text-slate-800 dark:text-slate-200">{alert.login}</span>
+                  </div>
+                  <div className="space-y-1 pt-1">
+                    <span className="text-xs font-bold text-slate-500">Anotação</span>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                      {alert.reminderNote || 'Sem anotação'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-2">
+                  <button
+                    onClick={() => setActiveReminderAlerts(prev => prev.filter(a => a.itemId !== alert.itemId))}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors shadow-lg shadow-indigo-600/20 cursor-pointer"
+                  >
+                    Estou Ciente - Fechar Alerta
+                  </button>
                 </div>
               </motion.div>
             ))}

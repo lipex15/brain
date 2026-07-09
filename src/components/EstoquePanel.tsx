@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Database, Plus, Search, Trash2, Edit2, AlertTriangle, Key, ShoppingBag, Eye, Copy, Check, User, Clock, ChevronDown, ChevronUp, RefreshCw, X, Layers, ShieldCheck
+  Database, Plus, Search, Trash2, Edit2, AlertTriangle, Key, ShoppingBag, Eye, Copy, Check, User, Clock, ChevronDown, ChevronUp, RefreshCw, X, Layers, ShieldCheck, Bell
 } from 'lucide-react';
 import { StockProduct, StockInventoryItem, NotificationItem } from '../types';
 
@@ -52,6 +52,12 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
   const [hasWarranty, setHasWarranty] = useState(false);
   const [warrantyType, setWarrantyType] = useState<string>('24');
   const [customWarrantyHours, setCustomWarrantyHours] = useState<string>('12');
+
+  // REMINDER FORM STATES
+  const [hasReminder, setHasReminder] = useState(false);
+  const [reminderAmount, setReminderAmount] = useState<string>('7');
+  const [reminderUnit, setReminderUnit] = useState<'minutes' | 'hours' | 'days'>('days');
+  const [reminderNote, setReminderNote] = useState('');
 
   const [sortProductBy, setSortProductBy] = useState<'alpha' | 'quantity' | 'recent'>('alpha');
   const [filterWarranty, setFilterWarranty] = useState<'all' | 'warranty'>(forceWarrantyFilter ? 'warranty' : 'all');
@@ -135,9 +141,19 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
     }
   };
 
+  const getReminderHours = () => {
+    if (!hasReminder) return undefined;
+    const amount = parseFloat(reminderAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) return undefined;
+    if (reminderUnit === 'minutes') return amount / 60;
+    if (reminderUnit === 'days') return amount * 24;
+    return amount;
+  };
+
   const handleAddIndividualAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !login.trim()) return;
+    const reminderHours = getReminderHours();
     try {
       const res = await fetch(`/api/stock/products/${selectedProduct.id}/items`, {
         method: 'POST',
@@ -145,12 +161,15 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
         body: JSON.stringify({
           login, senha, email, senhaEmail, observacao, dataNascimento, perguntaSecreta, respostaSecreta, paisCadastro,
           warrantyHours: hasWarranty ? (warrantyType === 'custom' ? customWarrantyHours : warrantyType) : undefined,
+          reminderHours,
+          reminderNote: reminderHours ? reminderNote : undefined,
         })
       });
       if (res.ok) {
         setLogin(''); setSenha(''); setEmail(''); setSenhaEmail(''); setObservacao(''); setDataNascimento('');
         setPerguntaSecreta(''); setRespostaSecreta(''); setPaisCadastro(''); setShowExtraFields(false);
         setHasWarranty(false); setWarrantyType('24'); setCustomWarrantyHours('12');
+        setHasReminder(false); setReminderAmount('7'); setReminderUnit('days'); setReminderNote('');
         fetchProductItems(selectedProduct.id);
         fetchProducts();
       }
@@ -213,6 +232,16 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
     navigator.clipboard.writeText(text);
     setCopiedItemId(id);
     setTimeout(() => setCopiedItemId(null), 2000);
+  };
+
+  const formatTimeLeft = (ms: number) => {
+    const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    if (days > 0) return `${days}d${hours > 0 ? ` ${hours}h` : ''}`;
+    if (hours > 0) return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
+    return `${minutes}m`;
   };
 
   const totalProducts = products.length;
@@ -541,6 +570,57 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
                                       )}
                                     </div>
 
+                                    {/* REMINDER SECTION */}
+                                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <div
+                                          onClick={() => setHasReminder(!hasReminder)}
+                                          className={`w-8 h-4 rounded-full transition-colors flex-shrink-0 relative cursor-pointer ${hasReminder ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-700'}`}
+                                        >
+                                          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${hasReminder ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                        </div>
+                                        <Bell className={`w-3.5 h-3.5 flex-shrink-0 ${hasReminder ? 'text-indigo-500' : 'text-slate-400'}`} />
+                                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">Criar alerta para esta conta?</span>
+                                      </label>
+                                      {hasReminder && (
+                                        <div className="mt-2 space-y-2">
+                                          <div className="grid grid-cols-[1fr_120px] gap-2">
+                                            <div className="space-y-1">
+                                              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Me alertar em</label>
+                                              <input
+                                                type="number" step="any" min="0.01" placeholder="7"
+                                                value={reminderAmount}
+                                                onChange={e => setReminderAmount(e.target.value)}
+                                                className="w-full text-xs px-2 py-1.5 border border-indigo-200 dark:border-indigo-900/50 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                              />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Unidade</label>
+                                              <select
+                                                value={reminderUnit}
+                                                onChange={e => setReminderUnit(e.target.value as 'minutes' | 'hours' | 'days')}
+                                                className="w-full text-xs px-2 py-1.5 border border-indigo-200 dark:border-indigo-900/50 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-800 dark:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                              >
+                                                <option value="minutes">Minutos</option>
+                                                <option value="hours">Horas</option>
+                                                <option value="days">Dias</option>
+                                              </select>
+                                            </div>
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Anotação do alerta</label>
+                                            <textarea
+                                              placeholder="Ex: Trocar senha, revisar email, conferir disputa..."
+                                              value={reminderNote}
+                                              onChange={e => setReminderNote(e.target.value)}
+                                              rows={2}
+                                              className="w-full text-xs px-2.5 py-1.5 border border-indigo-200 dark:border-indigo-900/50 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                            />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
                                     <button type="submit" className="w-full py-2 mt-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white rounded-xl transition-all cursor-pointer" disabled={!login || !senha}>
                                       Salvar Conta no Estoque
                                     </button>
@@ -604,6 +684,12 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                           const warrantyActive = warrantyMs !== null && warrantyMs > 0;
                                           const warrantyExpired = item.warrantyExpiresAt && !warrantyActive;
                                           const warrantyMinutes = warrantyActive ? Math.floor(warrantyMs! / 60000) : 0;
+                                          const reminderMs = item.reminderAt
+                                            ? new Date(item.reminderAt as string).getTime() - Date.now()
+                                            : null;
+                                          const reminderPending = reminderMs !== null && reminderMs > 0 && !item.reminderAlertSent;
+                                          const reminderDue = reminderMs !== null && reminderMs <= 0 && !item.reminderAlertSent;
+                                          const reminderSent = !!item.reminderAlertSent;
 
                                           return (
                                             <React.Fragment key={item.id}>
@@ -644,6 +730,24 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                                     {warrantyExpired && (
                                                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-slate-100 border-slate-200 text-slate-400 dark:bg-slate-800 dark:border-slate-700" title="Garantia expirada">
                                                         <ShieldCheck className="w-2.5 h-2.5" /> Expirada
+                                                      </span>
+                                                    )}
+                                                    {reminderPending && (
+                                                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-800 dark:text-indigo-300" title={item.reminderNote || 'Alerta pendente'}>
+                                                        <Bell className="w-2.5 h-2.5" />
+                                                        {formatTimeLeft(reminderMs!)}
+                                                      </span>
+                                                    )}
+                                                    {reminderDue && (
+                                                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400 animate-pulse" title={item.reminderNote || 'Alerta vencido'}>
+                                                        <Bell className="w-2.5 h-2.5" />
+                                                        Agora
+                                                      </span>
+                                                    )}
+                                                    {reminderSent && (
+                                                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-slate-100 border-slate-200 text-slate-400 dark:bg-slate-800 dark:border-slate-700" title={item.reminderNote || 'Alerta enviado'}>
+                                                        <Bell className="w-2.5 h-2.5" />
+                                                        Enviado
                                                       </span>
                                                     )}
                                                   </div>
@@ -752,6 +856,23 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                                           <span className="text-slate-800 dark:text-slate-100 font-semibold">{item.paisCadastro || 'N/A'}</span>
                                                         </div>
                                                       </div>
+
+                                                      {item.reminderAt && (
+                                                        <div className="md:col-span-2 bg-indigo-50/70 dark:bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-900/50">
+                                                          <div className="flex items-center justify-between gap-3 mb-1">
+                                                            <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider block leading-none">Alerta de Conta</span>
+                                                            <span className="text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-300">
+                                                              {item.reminderAlertSent ? 'Enviado' : reminderPending ? `Em ${formatTimeLeft(reminderMs!)}` : 'Pendente'}
+                                                            </span>
+                                                          </div>
+                                                          <p className="text-[11px] text-slate-700 dark:text-slate-300 font-medium whitespace-pre-line">
+                                                            {item.reminderNote || 'Sem anotação'}
+                                                          </p>
+                                                          <p className="text-[9px] text-slate-400 font-semibold mt-1">
+                                                            Programado para {new Date(item.reminderAt).toLocaleString('pt-BR')}
+                                                          </p>
+                                                        </div>
+                                                      )}
 
                                                       {item.observacao && (
                                                         <div className="md:col-span-2 bg-slate-100/55 dark:bg-slate-950/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">

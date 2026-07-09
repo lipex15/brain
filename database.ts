@@ -55,6 +55,15 @@ export function initDatabase(storageDir: string): void {
       paisCadastro TEXT,
       FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS reminders (
+      id TEXT PRIMARY KEY,
+      note TEXT NOT NULL,
+      remind_at TEXT,
+      alert_sent INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT
+    );
   `);
   // Safe column migrations — silently ignored if column already exists
   const safeAlter = (sql: string) => {
@@ -62,6 +71,9 @@ export function initDatabase(storageDir: string): void {
   };
   safeAlter("ALTER TABLE items ADD COLUMN warranty_expires_at TEXT");
   safeAlter("ALTER TABLE items ADD COLUMN warranty_alert_sent INTEGER DEFAULT 0");
+  safeAlter("ALTER TABLE items ADD COLUMN reminder_at TEXT");
+  safeAlter("ALTER TABLE items ADD COLUMN reminder_note TEXT");
+  safeAlter("ALTER TABLE items ADD COLUMN reminder_alert_sent INTEGER DEFAULT 0");
 
   // Try to migrate from old stock.json if it exists
   migrateFromJson(storageDir);
@@ -237,7 +249,8 @@ export function getStockSummary(): StockProduct[] {
     SELECT
       SUM(CASE WHEN status = 'disponivel' THEN 1 ELSE 0 END) as availableCount,
       COUNT(*) as totalCount,
-      SUM(CASE WHEN status = 'disponivel' AND warranty_expires_at IS NOT NULL AND warranty_expires_at > ? THEN 1 ELSE 0 END) as activeWarrantyCount
+      SUM(CASE WHEN status = 'disponivel' AND warranty_expires_at IS NOT NULL AND warranty_expires_at > ? THEN 1 ELSE 0 END) as activeWarrantyCount,
+      SUM(CASE WHEN reminder_at IS NOT NULL AND reminder_alert_sent = 0 THEN 1 ELSE 0 END) as activeReminderCount
     FROM items WHERE product_id = ?
   `);
 
@@ -253,7 +266,8 @@ export function getStockSummary(): StockProduct[] {
       minWarning: p.minWarning,
       availableCount: counts ? (counts.availableCount || 0) : 0,
       totalCount: counts ? (counts.totalCount || 0) : 0,
-      activeWarrantyCount: counts ? (counts.activeWarrantyCount || 0) : 0
+      activeWarrantyCount: counts ? (counts.activeWarrantyCount || 0) : 0,
+      activeReminderCount: counts ? (counts.activeReminderCount || 0) : 0
     });
   }
 
