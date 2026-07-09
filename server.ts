@@ -190,6 +190,9 @@ initDatabase(STORAGE_DIR);
 // --- 2. GLOBAL APP STATE ---
 let settings = loadSettings();
 let notifications = loadNotifications();
+if (normalizeStoredNotificationClassifications(notifications)) {
+  saveNotifications(notifications);
+}
 let sseClients: express.Response[] = [];
 let logs: LiveLog[] = [];
 
@@ -273,6 +276,101 @@ function stopDiscordBot() {
   broadcastEvent("status_discord", discordStatus);
 }
 
+function normalizeClassificationText(text: string) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function detectGameMarketAdministrativeEvent(combinedText: string, rawTitle = ""): { title: string; descriptionFallback: string } | null {
+  const titleText = normalizeClassificationText(rawTitle);
+  const text = normalizeClassificationText(`${rawTitle} ${combinedText}`);
+
+  const hasAny = (source: string, terms: string[]) => terms.some((term) => source.includes(term));
+
+  if (hasAny(titleText, ["saldo atualizado"]) || (text.includes("saldo atualizado") && text.includes("disponivel") && text.includes("pendente"))) {
+    return {
+      title: "💼 Saldo Atualizado",
+      descriptionFallback: "Saldo da GameMarket atualizado.",
+    };
+  }
+
+  if (hasAny(titleText, ["saque solicitado"]) || hasAny(text, ["saque solicitado", "solicitacao de saque", "solicitação de saque"])) {
+    return {
+      title: "🏦 Saque Solicitado",
+      descriptionFallback: "Saque solicitado na GameMarket.",
+    };
+  }
+
+  if (hasAny(titleText, ["pedido finalizado"]) || hasAny(text, ["pedido finalizado", "garantia encerrada"])) {
+    return {
+      title: "✅ Pedido Finalizado",
+      descriptionFallback: "Pedido finalizado na GameMarket.",
+    };
+  }
+
+  if (hasAny(titleText, ["fundos liberados"]) || hasAny(text, ["fundos liberados", "saldo do pedido liberado", "valor liquido"])) {
+    return {
+      title: "💸 Fundos Liberados",
+      descriptionFallback: "Fundos de pedido liberados na GameMarket.",
+    };
+  }
+
+  if (hasAny(titleText, ["produto criado", "anuncio criado", "anuncio publicado", "anuncio aprovado"]) ||
+      hasAny(text, ["produto criado", "anuncio criado", "anuncio publicado", "anuncio aprovado", "produto publicado", "produto aprovado", "novo anuncio", "novo produto"])) {
+    return {
+      title: "📦 Produto Criado",
+      descriptionFallback: "Produto ou anuncio criado na GameMarket.",
+    };
+  }
+
+  return null;
+}
+
+function isGameMarketSaleEvent(combinedText: string, rawTitle = "") {
+  const titleText = normalizeClassificationText(rawTitle);
+  const text = normalizeClassificationText(`${rawTitle} ${combinedText}`);
+
+  return [
+    "nova venda",
+    "venda realizada",
+    "pedido recebido",
+    "novo pedido",
+    "pedido aprovado",
+    "pedido pago",
+    "compra realizada",
+    "comprador",
+  ].some((term) => titleText.includes(term) || text.includes(term));
+}
+
+function normalizeStoredNotificationClassifications(items: NotificationItem[]) {
+  let changed = false;
+
+  for (const item of items) {
+    if (item.platform !== "gamemarket") continue;
+    const adminEvent = detectGameMarketAdministrativeEvent(`${item.title || ""} ${item.description || ""} ${item.itemName || ""}`, item.title || "");
+    const generatedUnknownSale =
+      item.category === "venda" &&
+      normalizeClassificationText(item.title || "").includes("nova venda") &&
+      normalizeClassificationText(item.description || "").includes("venda realizada no gamemarket") &&
+      normalizeClassificationText(item.buyerName || "") === "n/a" &&
+      normalizeClassificationText(item.itemName || "") === "produto desconhecido";
+
+    if (!adminEvent && !generatedUnknownSale) continue;
+
+    const nextTitle = `${adminEvent ? adminEvent.title : "🔔 Evento GameMarket"} - GameMarket`;
+    if (item.category !== "outros" || item.priority !== "normal" || item.title !== nextTitle) {
+      item.category = "outros";
+      item.priority = "normal";
+      item.title = nextTitle;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 function parseDiscordMessage(content: string, embedData: any = {}): Partial<NotificationItem> {
   const combinedText = `${content} ${embedData.title || ''} ${embedData.description || ''} ${embedData.footer || ''} ${embedData.authorName || ''} ${JSON.stringify(embedData.fields || [])}`.toLowerCase();
 
@@ -346,8 +444,15 @@ function parseDiscordMessage(content: string, embedData: any = {}): Partial<Noti
 
   // 2. Category and Title detection based on the types of webhooks (venda, pergunta, reclamacao, outros)
   const embedTitle = (embedData.title || "").toLowerCase();
+  const gameMarketAdminEvent = platform === "gamemarket"
+    ? detectGameMarketAdministrativeEvent(combinedText, embedData.title || "")
+    : null;
 
-  if (embedTitle.includes("pergunta") || combinedText.includes("pergunta") || combinedText.includes("dúvida")) {
+  if (gameMarketAdminEvent) {
+    category = "outros";
+    priority = "normal";
+    title = gameMarketAdminEvent.title;
+  } else if (embedTitle.includes("pergunta") || combinedText.includes("pergunta") || combinedText.includes("dúvida")) {
     category = "pergunta";
     priority = "normal";
     title = "❓ Nova Pergunta";
@@ -359,6 +464,10 @@ function parseDiscordMessage(content: string, embedData: any = {}): Partial<Noti
     category = "reclamacao";
     priority = "urgente";
     title = "⚠️ Nova Mediação";
+  } else if (platform === "gamemarket" && !isGameMarketSaleEvent(combinedText, embedData.title || "")) {
+    category = "outros";
+    priority = "normal";
+    title = "🔔 Evento GameMarket";
   } else {
     // Default to "venda"
     category = "venda";
@@ -400,6 +509,8 @@ function parseDiscordMessage(content: string, embedData: any = {}): Partial<Noti
   if (!cleanDesc) {
     if (category === "venda") {
       cleanDesc = `Venda realizada no ${platform.toUpperCase()}.\nProduto: ${item}\nComprador: ${buyer}\nValor: R$ ${parsedPrice ? parsedPrice.toFixed(2) : '0.00'}`;
+    } else if (gameMarketAdminEvent) {
+      cleanDesc = gameMarketAdminEvent.descriptionFallback;
     } else {
       cleanDesc = `Notificação recebida de ${platform.toUpperCase()}`;
     }
@@ -1046,6 +1157,11 @@ function simulateWhatsAppScan() {
 
 function triggerWhatsAppForward(notif: NotificationItem, deliveredItem: any = null) {
   if (!settings.whatsapp.enabled || whatsappStatus.status !== 'conectado' || !wpClient) return;
+
+  if (notif.category === "outros") {
+    addLog("whatsapp", "info", "Alerta administrativo ignorado no WhatsApp para evitar confusao com venda.");
+    return;
+  }
 
   // Filter based on Priority and Platform filters
   const matchesPriority = settings.whatsapp.priorities.includes(notif.priority);

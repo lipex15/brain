@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Adiciona painel de Assinaturas separado por GGMAX e GameMarket\n- Permite cadastrar cliente, chat, data da compra, ativacao, duracao, vencimento e observacoes\n- Inclui alertas automaticos de vencimento no app, WhatsApp e Discord, com renovacao/cancelamento manual`,
+        body: `deathStuffs ${tag}\n\n- Corrige classificacao de notificacoes GameMarket para nao tratar saque, saldo, fundos liberados, pedido finalizado e produto criado como venda\n- Eventos administrativos deixam de contar no faturamento/total de vendas\n- Notificacoes antigas claramente classificadas errado sao ajustadas ao abrir o app atualizado`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
