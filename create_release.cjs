@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Reconectar WhatsApp agora usa uma rota propria para preparar novo QR Code\n- Limpeza de sessao do WhatsApp ganhou tentativas extras no Windows\n- A tela mostra o erro real se o QR nao puder ser preparado`,
+        body: `deathStuffs ${tag}\n\n- Corrige EBUSY do CrashpadMetrics ao reconectar WhatsApp\n- Encerramento do Chromium agora mata a arvore de processos no Windows\n- Se a sessao antiga ficar bloqueada, o app cria uma sessao nova para gerar o QR Code`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

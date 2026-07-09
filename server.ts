@@ -678,24 +678,128 @@ function clearWhatsAppStartupTimer() {
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function clearWhatsAppSessionFolder() {
-  const wsSessionDir = path.join(STORAGE_DIR, 'whatsapp-session');
+function getWhatsAppSessionBaseDir() {
+  return path.join(STORAGE_DIR, 'whatsapp-session');
+}
+
+function getWhatsAppSessionMetaFile() {
+  return path.join(getWhatsAppSessionBaseDir(), 'active-session.json');
+}
+
+function loadWhatsAppSessionClientId(): string | null {
+  try {
+    const metaFile = getWhatsAppSessionMetaFile();
+    if (!fs.existsSync(metaFile)) return null;
+    const parsed = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+    const clientId = String(parsed.clientId || '').trim();
+    return /^[A-Za-z0-9_-]+$/.test(clientId) ? clientId : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveWhatsAppSessionClientId(clientId: string | null) {
+  const baseDir = getWhatsAppSessionBaseDir();
+  if (!clientId) {
+    try {
+      const metaFile = getWhatsAppSessionMetaFile();
+      if (fs.existsSync(metaFile)) fs.unlinkSync(metaFile);
+    } catch (e) { }
+    return;
+  }
+
+  if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir, { recursive: true });
+  fs.writeFileSync(getWhatsAppSessionMetaFile(), JSON.stringify({ clientId }, null, 2), 'utf8');
+}
+
+let whatsappSessionClientId: string | null = loadWhatsAppSessionClientId();
+
+function getWhatsAppAuthOptions() {
+  const dataPath = getWhatsAppSessionBaseDir();
+  return whatsappSessionClientId
+    ? { dataPath, clientId: whatsappSessionClientId }
+    : { dataPath };
+}
+
+function getCurrentWhatsAppSessionDir() {
+  return path.join(getWhatsAppSessionBaseDir(), whatsappSessionClientId ? `session-${whatsappSessionClientId}` : 'session');
+}
+
+function useFreshWhatsAppSession() {
+  whatsappSessionClientId = `qr_${Date.now()}`;
+  saveWhatsAppSessionClientId(whatsappSessionClientId);
+  addLog("whatsapp", "warn", "Sessao antiga estava travada. Usando uma nova sessao limpa para gerar QR Code.");
+}
+
+function killProcessTree(pid: number) {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      const { execFileSync } = require('child_process');
+      execFileSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
+  } catch (e) { }
+}
+
+function killWhatsAppSessionProcesses() {
+  if (process.platform !== 'win32') return;
+  try {
+    const { execFileSync } = require('child_process');
+    const sessionPath = getWhatsAppSessionBaseDir().replace(/'/g, "''");
+    const command = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${sessionPath}') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', command], { stdio: 'ignore' });
+  } catch (e) { }
+}
+
+function destroyWhatsAppClient(client: any) {
+  if (!client) return;
+  let pid: number | undefined;
+  try {
+    pid = client.pupBrowser?.process()?.pid;
+  } catch (e) { }
+
+  try {
+    const destroyResult = client.destroy();
+    if (destroyResult && typeof destroyResult.catch === 'function') {
+      destroyResult.catch(() => { });
+    }
+  } catch (e) { }
+
+  if (pid) {
+    addLog("whatsapp", "info", `Encerrando Chromium ativamente (PID ${pid}) para liberar arquivos.`);
+    killProcessTree(pid);
+  }
+}
+
+async function clearWhatsAppSessionFolder(options: { fallbackToNewSession?: boolean } = {}) {
+  const wsSessionDir = getWhatsAppSessionBaseDir();
   if (!fs.existsSync(wsSessionDir)) return;
 
+  killWhatsAppSessionProcesses();
+
   let lastError: any = null;
-  for (let attempt = 1; attempt <= 6; attempt++) {
+  for (let attempt = 1; attempt <= 10; attempt++) {
     try {
       fs.rmSync(wsSessionDir, {
         recursive: true,
         force: true,
-        maxRetries: 3,
+        maxRetries: 5,
         retryDelay: 250,
       });
+      whatsappSessionClientId = null;
       return;
     } catch (err: any) {
       lastError = err;
-      await wait(450);
+      killWhatsAppSessionProcesses();
+      await wait(700);
     }
+  }
+
+  if (options.fallbackToNewSession) {
+    useFreshWhatsAppSession();
+    return;
   }
 
   throw lastError || new Error("Nao foi possivel limpar a sessao antiga do WhatsApp.");
@@ -710,20 +814,10 @@ function stopWhatsAppBot(options: { log?: boolean; broadcast?: boolean } = {}) {
     simulatedWhatsAppTimer = null;
   }
   if (wpClient) {
-    try {
-      const pid = wpClient.pupBrowser?.process()?.pid;
-      if (pid) {
-        addLog("whatsapp", "info", `Encerrando Chromium ativamente (PID ${pid}) para liberar arquivos.`);
-        process.kill(pid, "SIGKILL");
-      }
-    } catch (e: any) {
-      console.error("[WhatsApp] Erro ao forçar encerramento do Chromium:", e.message);
-    }
-    try {
-      wpClient.destroy();
-    } catch (e) { }
+    destroyWhatsAppClient(wpClient);
     wpClient = null;
   }
+  killWhatsAppSessionProcesses();
   whatsappStatus = {
     status: 'desconectado',
     qrCode: null,
@@ -794,9 +888,7 @@ function startWhatsAppBot(force = false) {
     const stalledClient = wpClient;
     wpClient = null;
     if (stalledClient) {
-      try {
-        stalledClient.destroy();
-      } catch (e) { }
+      destroyWhatsAppClient(stalledClient);
     }
 
     whatsappStatus = {
@@ -810,10 +902,11 @@ function startWhatsAppBot(force = false) {
   // Clear directory locks to avoid Chrome startup profile hang
   try {
     const fs = require('fs');
-    const lockPath1 = path.join(STORAGE_DIR, 'whatsapp-session', 'session', 'SingletonLock');
-    const lockPath2 = path.join(STORAGE_DIR, 'whatsapp-session', 'session', 'Default', 'SingletonLock');
-    const lockPath3 = path.join(STORAGE_DIR, 'whatsapp-session', 'session', 'lockfile');
-    const lockPath4 = path.join(STORAGE_DIR, 'whatsapp-session', 'session', 'Default', 'lockfile');
+    const currentSessionDir = getCurrentWhatsAppSessionDir();
+    const lockPath1 = path.join(currentSessionDir, 'SingletonLock');
+    const lockPath2 = path.join(currentSessionDir, 'Default', 'SingletonLock');
+    const lockPath3 = path.join(currentSessionDir, 'lockfile');
+    const lockPath4 = path.join(currentSessionDir, 'Default', 'lockfile');
     if (fs.existsSync(lockPath1)) fs.unlinkSync(lockPath1);
     if (fs.existsSync(lockPath2)) fs.unlinkSync(lockPath2);
     if (fs.existsSync(lockPath3)) fs.unlinkSync(lockPath3);
@@ -826,7 +919,7 @@ function startWhatsAppBot(force = false) {
     : undefined;
 
   wpClient = new WhatsAppClient({
-    authStrategy: new LocalAuth({ dataPath: path.join(STORAGE_DIR, 'whatsapp-session') }),
+    authStrategy: new LocalAuth(getWhatsAppAuthOptions()),
     puppeteer: {
       executablePath: getChromeExecutablePath(),
       headless: true,
@@ -890,9 +983,7 @@ function startWhatsAppBot(force = false) {
     const failedClient = wpClient;
     wpClient = null;
     if (failedClient) {
-      try {
-        failedClient.destroy();
-      } catch (e) { }
+      destroyWhatsAppClient(failedClient);
     }
     whatsappStatus = {
       status: 'desconectado',
@@ -910,9 +1001,7 @@ function startWhatsAppBot(force = false) {
     const failedClient = wpClient;
     wpClient = null;
     if (failedClient) {
-      try {
-        failedClient.destroy();
-      } catch (e) { }
+      destroyWhatsAppClient(failedClient);
     }
     whatsappStatus = {
       status: 'desconectado',
@@ -1964,7 +2053,7 @@ app.post("/api/whatsapp/disconnect", async (req, res) => {
     }
     stopWhatsAppBot();
 
-    await clearWhatsAppSessionFolder();
+    await clearWhatsAppSessionFolder({ fallbackToNewSession: true });
 
     // Automatically bring the QR code scanner back up if enabled
     if (settings.whatsapp.enabled) startWhatsAppBot(true);
@@ -1998,7 +2087,7 @@ app.post("/api/whatsapp/reconnect", async (req, res) => {
     broadcastEvent("status_whatsapp", whatsappStatus);
 
     await wait(800);
-    await clearWhatsAppSessionFolder();
+    await clearWhatsAppSessionFolder({ fallbackToNewSession: true });
 
     startWhatsAppBot(true);
     res.json({
