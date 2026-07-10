@@ -779,12 +779,20 @@ async function syncDiscordHistory() {
 let wpClient: any = null;
 let simulatedWhatsAppTimer: NodeJS.Timeout | null = null;
 let whatsappStartupTimer: NodeJS.Timeout | null = null;
+let whatsappReadyTimer: NodeJS.Timeout | null = null;
 let whatsappBootId = 0;
 
 function clearWhatsAppStartupTimer() {
   if (whatsappStartupTimer) {
     clearTimeout(whatsappStartupTimer);
     whatsappStartupTimer = null;
+  }
+}
+
+function clearWhatsAppReadyTimer() {
+  if (whatsappReadyTimer) {
+    clearTimeout(whatsappReadyTimer);
+    whatsappReadyTimer = null;
   }
 }
 
@@ -921,6 +929,7 @@ function stopWhatsAppBot(options: { log?: boolean; broadcast?: boolean } = {}) {
   const { log = true, broadcast = true } = options;
   whatsappBootId++;
   clearWhatsAppStartupTimer();
+  clearWhatsAppReadyTimer();
   if (simulatedWhatsAppTimer) {
     clearTimeout(simulatedWhatsAppTimer);
     simulatedWhatsAppTimer = null;
@@ -1048,6 +1057,9 @@ function startWhatsAppBot(force = false) {
 
   wpClient = new WhatsAppClient({
     authStrategy: new LocalAuth(getWhatsAppAuthOptions()),
+    authTimeoutMs: 90000,
+    deviceName: 'deathStuffs',
+    browserName: 'Chrome',
     puppeteer: {
       executablePath: getChromeExecutablePath(),
       headless: true,
@@ -1078,6 +1090,7 @@ function startWhatsAppBot(force = false) {
     if (bootId !== whatsappBootId) return;
     try {
       clearWhatsAppStartupTimer();
+      clearWhatsAppReadyTimer();
       const qrDataUrl = await qrcode.toDataURL(qr);
       whatsappStatus.status = 'esperando_qr';
       whatsappStatus.qrCode = qrDataUrl;
@@ -1089,9 +1102,41 @@ function startWhatsAppBot(force = false) {
     }
   });
 
+  wpClient.on('authenticated', () => {
+    if (bootId !== whatsappBootId) return;
+    clearWhatsAppStartupTimer();
+    clearWhatsAppReadyTimer();
+
+    whatsappStatus.status = 'conectando';
+    whatsappStatus.qrCode = null;
+    whatsappStatus.statusText = "QR confirmado. Finalizando conexao...";
+    addLog("whatsapp", "success", "QR Code confirmado pelo celular. Finalizando a conexao segura...");
+    broadcastEvent("status_whatsapp", whatsappStatus);
+
+    whatsappReadyTimer = setTimeout(() => {
+      if (bootId !== whatsappBootId || whatsappStatus.status === 'conectado') return;
+
+      whatsappBootId++;
+      whatsappReadyTimer = null;
+      addLog("whatsapp", "error", "O WhatsApp confirmou o QR, mas nao concluiu a sincronizacao. Gere um novo QR Code e tente novamente.");
+
+      const stalledClient = wpClient;
+      wpClient = null;
+      if (stalledClient) destroyWhatsAppClient(stalledClient);
+
+      whatsappStatus = {
+        status: 'desconectado',
+        qrCode: null,
+        statusText: "QR confirmado, mas a sincronizacao nao terminou. Tente reconectar.",
+      };
+      broadcastEvent("status_whatsapp", whatsappStatus);
+    }, 120000);
+  });
+
   wpClient.on('ready', () => {
     if (bootId !== whatsappBootId) return;
     clearWhatsAppStartupTimer();
+    clearWhatsAppReadyTimer();
     whatsappStatus.status = 'conectado';
     whatsappStatus.qrCode = null;
     whatsappStatus.statusText = "Conectado e Ativo";
@@ -1103,6 +1148,7 @@ function startWhatsAppBot(force = false) {
     if (bootId !== whatsappBootId) return;
     whatsappBootId++;
     clearWhatsAppStartupTimer();
+    clearWhatsAppReadyTimer();
     addLog("whatsapp", "warn", `WhatsApp desconectado: ${reason}`);
     wpClient = null;
     whatsappStatus = {
@@ -1117,6 +1163,7 @@ function startWhatsAppBot(force = false) {
     if (bootId !== whatsappBootId) return;
     whatsappBootId++;
     clearWhatsAppStartupTimer();
+    clearWhatsAppReadyTimer();
     addLog("whatsapp", "error", `Falha na autenticacao WhatsApp: ${msg}`);
     const failedClient = wpClient;
     wpClient = null;
@@ -1135,6 +1182,7 @@ function startWhatsAppBot(force = false) {
     if (bootId !== whatsappBootId) return;
     whatsappBootId++;
     clearWhatsAppStartupTimer();
+    clearWhatsAppReadyTimer();
     addLog("whatsapp", "error", `Falha ao iniciar core do WhatsApp: ${err.message}`);
     const failedClient = wpClient;
     wpClient = null;

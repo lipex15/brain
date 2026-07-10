@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige classificacao de notificacoes GameMarket para nao tratar saque, saldo, fundos liberados, pedido finalizado e produto criado como venda\n- Eventos administrativos deixam de contar no faturamento/total de vendas\n- Notificacoes antigas claramente classificadas errado sao ajustadas ao abrir o app atualizado`,
+        body: `deathStuffs ${tag}\n\n- Corrige a falha que encerrava o servidor interno depois da leitura do QR Code do WhatsApp\n- Torna a transicao de autenticacao do WhatsApp resistente a navegacoes simultaneas\n- Exibe o estado de finalizacao da conexao e evita espera infinita apos confirmar o QR`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
