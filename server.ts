@@ -1060,27 +1060,24 @@ function startWhatsAppBot(force = false) {
     authTimeoutMs: 90000,
     deviceName: 'deathStuffs',
     browserName: 'Chrome',
+    // Chromium stays fully headless, but WhatsApp Web needs a real desktop viewport
+    // and a current browser identity to complete synchronization after the QR scan.
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.31 Safari/537.36',
     puppeteer: {
       executablePath: getChromeExecutablePath(),
       headless: true,
-      defaultViewport: { width: 1, height: 1 },
+      defaultViewport: { width: 1365, height: 900 },
       args: [
         '--headless=new',
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-extensions',
         '--disable-gpu',
         '--disable-dev-shm-usage',
         '--disable-crash-reporter',
         '--disable-crashpad',
-        '--disable-background-networking',
-        '--disable-component-update',
-        '--disable-features=Translate,MediaRouter',
         '--no-first-run',
         '--no-default-browser-check',
-        '--start-minimized',
-        '--window-position=-32000,-32000',
-        '--window-size=1,1'
+        '--window-size=1365,900'
       ],
       env: cleanEnv
     }
