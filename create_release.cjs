@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige o travamento apos confirmar o QR Code do WhatsApp\n- Reabre automaticamente a ponte do WhatsApp quando a sessao fica presa apos o scan\n- Usa a versao atual do WhatsApp Web em vez de depender de cache local fixo\n- Mantem o Chromium invisivel, sem janela branca no desktop`,
+        body: `deathStuffs ${tag}\n\n- Remove definitivamente o retangulo branco criado pelo navegador interno do WhatsApp\n- Mantem a janela tecnica fora da area visivel do Windows sem reduzir a area interna do WhatsApp Web\n- Preserva a conexao do WhatsApp e todos os dados e configuracoes existentes`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

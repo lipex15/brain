@@ -1077,6 +1077,8 @@ function startWhatsAppBot(force = false) {
         '--disable-crashpad',
         '--no-first-run',
         '--no-default-browser-check',
+        '--start-minimized',
+        '--window-position=-32000,-32000',
         '--window-size=1365,900'
       ],
       env: cleanEnv
