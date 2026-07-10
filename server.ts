@@ -781,6 +781,7 @@ let simulatedWhatsAppTimer: NodeJS.Timeout | null = null;
 let whatsappStartupTimer: NodeJS.Timeout | null = null;
 let whatsappReadyTimer: NodeJS.Timeout | null = null;
 let whatsappBootId = 0;
+let whatsappPostAuthRecoveryAttempts = 0;
 
 function clearWhatsAppStartupTimer() {
   if (whatsappStartupTimer) {
@@ -952,22 +953,6 @@ function getChromeExecutablePath() {
   const fs = require('fs');
   const path = require('path');
 
-  try {
-    const puppeteer = require('puppeteer');
-    const bundledChromePath = puppeteer.executablePath();
-    if (bundledChromePath && fs.existsSync(bundledChromePath)) {
-      console.log(`[WhatsApp] Usando Chromium headless do Puppeteer em: ${bundledChromePath}`);
-      return bundledChromePath;
-    }
-  } catch (e: any) {
-    console.log(`[WhatsApp] Chromium do Puppeteer indisponivel: ${e.message}`);
-  }
-
-  if (process.env.DSB_ALLOW_SYSTEM_BROWSER !== '1') {
-    console.log("[WhatsApp] Navegador local ignorado para evitar janela auxiliar visivel.");
-    return undefined;
-  }
-
   const localAppData = process.env.LOCALAPPDATA || '';
   const programFiles = process.env.PROGRAMFILES || 'C:\\Program Files';
   const programFilesX86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
@@ -982,9 +967,20 @@ function getChromeExecutablePath() {
 
   for (const p of paths) {
     if (fs.existsSync(p)) {
-      console.log(`[WhatsApp] Encontrou navegador local em: ${p}`);
+      console.log(`[WhatsApp] Usando navegador local em: ${p}`);
       return p;
     }
+  }
+
+  try {
+    const puppeteer = require('puppeteer');
+    const bundledChromePath = puppeteer.executablePath();
+    if (bundledChromePath && fs.existsSync(bundledChromePath)) {
+      console.log(`[WhatsApp] Navegador local nao encontrado. Usando Chromium do Puppeteer em: ${bundledChromePath}`);
+      return bundledChromePath;
+    }
+  } catch (e: any) {
+    console.log(`[WhatsApp] Chromium do Puppeteer indisponivel: ${e.message}`);
   }
   return undefined; // Fallback to Puppeteer default
 }
@@ -1055,14 +1051,18 @@ function startWhatsAppBot(force = false) {
     ? Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('ELECTRON_') && k !== 'NODE_OPTIONS'))
     : undefined;
 
+  let lastWhatsAppLoadingLog: number | null = null;
+
   wpClient = new WhatsAppClient({
     authStrategy: new LocalAuth(getWhatsAppAuthOptions()),
     authTimeoutMs: 90000,
     deviceName: 'deathStuffs',
     browserName: 'Chrome',
-    // Chromium stays fully headless, but WhatsApp Web needs a real desktop viewport
-    // and a current browser identity to complete synchronization after the QR scan.
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.31 Safari/537.36',
+    webVersionCache: {
+      type: 'none'
+    },
+    // Prefer the same local browser flow used by the original working version.
+    // The bundled Chromium remains as a fallback when Chrome/Edge is not installed.
     puppeteer: {
       executablePath: getChromeExecutablePath(),
       headless: true,
@@ -1088,6 +1088,7 @@ function startWhatsAppBot(force = false) {
     try {
       clearWhatsAppStartupTimer();
       clearWhatsAppReadyTimer();
+      whatsappPostAuthRecoveryAttempts = 0;
       const qrDataUrl = await qrcode.toDataURL(qr);
       whatsappStatus.status = 'esperando_qr';
       whatsappStatus.qrCode = qrDataUrl;
@@ -1115,11 +1116,24 @@ function startWhatsAppBot(force = false) {
 
       whatsappBootId++;
       whatsappReadyTimer = null;
-      addLog("whatsapp", "error", "O WhatsApp confirmou o QR, mas nao concluiu a sincronizacao. Gere um novo QR Code e tente novamente.");
-
       const stalledClient = wpClient;
       wpClient = null;
       if (stalledClient) destroyWhatsAppClient(stalledClient);
+
+      if (whatsappPostAuthRecoveryAttempts < 2) {
+        whatsappPostAuthRecoveryAttempts++;
+        addLog("whatsapp", "warn", `QR confirmado, mas a sincronizacao travou. Reiniciando ponte WhatsApp automaticamente (tentativa ${whatsappPostAuthRecoveryAttempts}/2).`);
+        whatsappStatus = {
+          status: 'conectando',
+          qrCode: null,
+          statusText: "QR confirmado. Reabrindo conexao automaticamente...",
+        };
+        broadcastEvent("status_whatsapp", whatsappStatus);
+        setTimeout(() => startWhatsAppBot(true), 1500);
+        return;
+      }
+
+      addLog("whatsapp", "error", "O WhatsApp confirmou o QR, mas nao concluiu a sincronizacao mesmo apos reiniciar a ponte.");
 
       whatsappStatus = {
         status: 'desconectado',
@@ -1127,13 +1141,14 @@ function startWhatsAppBot(force = false) {
         statusText: "QR confirmado, mas a sincronizacao nao terminou. Tente reconectar.",
       };
       broadcastEvent("status_whatsapp", whatsappStatus);
-    }, 120000);
+    }, 35000);
   });
 
   wpClient.on('ready', () => {
     if (bootId !== whatsappBootId) return;
     clearWhatsAppStartupTimer();
     clearWhatsAppReadyTimer();
+    whatsappPostAuthRecoveryAttempts = 0;
     whatsappStatus.status = 'conectado';
     whatsappStatus.qrCode = null;
     whatsappStatus.statusText = "Conectado e Ativo";
@@ -1141,11 +1156,25 @@ function startWhatsAppBot(force = false) {
     broadcastEvent("status_whatsapp", whatsappStatus);
   });
 
+  wpClient.on('loading_screen', (percent: number, message: string) => {
+    if (bootId !== whatsappBootId) return;
+    const currentPercent = Number(percent);
+    if (lastWhatsAppLoadingLog === currentPercent) return;
+    lastWhatsAppLoadingLog = currentPercent;
+    addLog("whatsapp", "info", `Carregando WhatsApp Web: ${currentPercent}% ${message || ""}`.trim());
+  });
+
+  wpClient.on('change_state', (state: string) => {
+    if (bootId !== whatsappBootId) return;
+    addLog("whatsapp", "info", `Estado interno do WhatsApp Web: ${state}`);
+  });
+
   wpClient.on('disconnected', (reason) => {
     if (bootId !== whatsappBootId) return;
     whatsappBootId++;
     clearWhatsAppStartupTimer();
     clearWhatsAppReadyTimer();
+    whatsappPostAuthRecoveryAttempts = 0;
     addLog("whatsapp", "warn", `WhatsApp desconectado: ${reason}`);
     wpClient = null;
     whatsappStatus = {
@@ -1161,6 +1190,7 @@ function startWhatsAppBot(force = false) {
     whatsappBootId++;
     clearWhatsAppStartupTimer();
     clearWhatsAppReadyTimer();
+    whatsappPostAuthRecoveryAttempts = 0;
     addLog("whatsapp", "error", `Falha na autenticacao WhatsApp: ${msg}`);
     const failedClient = wpClient;
     wpClient = null;
@@ -1180,6 +1210,7 @@ function startWhatsAppBot(force = false) {
     whatsappBootId++;
     clearWhatsAppStartupTimer();
     clearWhatsAppReadyTimer();
+    whatsappPostAuthRecoveryAttempts = 0;
     addLog("whatsapp", "error", `Falha ao iniciar core do WhatsApp: ${err.message}`);
     const failedClient = wpClient;
     wpClient = null;

@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Corrige a sincronizacao que ficava presa depois de confirmar o QR Code do WhatsApp\n- Mantem o Chromium invisivel, agora com viewport e identificacao de navegador compativeis com o WhatsApp Web\n- Validado com uma copia isolada da sessao autenticada`,
+        body: `deathStuffs ${tag}\n\n- Corrige o travamento apos confirmar o QR Code do WhatsApp\n- Reabre automaticamente a ponte do WhatsApp quando a sessao fica presa apos o scan\n- Usa a versao atual do WhatsApp Web em vez de depender de cache local fixo\n- Mantem o Chromium invisivel, sem janela branca no desktop`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
