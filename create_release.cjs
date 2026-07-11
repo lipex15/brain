@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Cria automaticamente assinaturas de Xbox Game Pass quando chega venda compatível da GGMAX ou GameMarket\n- Mantem a venda contando no faturamento normalmente, sem criar valor extra por causa da assinatura\n- Usa cliente, plataforma, pedido, link e data da venda para preencher a aba Assinaturas no padrao atual\n- Evita criar assinatura duplicada quando a mesma notificacao ou pedido ja foi processado\n- Marca assinaturas criadas pelo fluxo automatico com o selo Auto\n- Mantem eventos financeiros, entregas e fundos liberados fora da criacao de assinaturas`,
+        body: `deathStuffs ${tag}\n\n- Adiciona uma faixa discreta com a quantidade de lembretes, alertas de contas e garantias LZT ativos\n- Abre a lista correta ao clicar em cada indicador\n- Adiciona o filtro de contas com alerta ativo no Estoque\n- Atualiza o contador assim que um alerta de conta e disparado\n- Mantem todos os dados e fluxos atuais sem alteracao`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

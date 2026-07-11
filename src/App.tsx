@@ -137,7 +137,7 @@ export default function App() {
   const [activeGeneralReminderAlerts, setActiveGeneralReminderAlerts] = useState<any[]>([]);
   const [activeSubscriptionAlerts, setActiveSubscriptionAlerts] = useState<any[]>([]);
   const [activeWarranties, setActiveWarranties] = useState<any[]>([]);
-  const [forceWarrantyFilter, setForceWarrantyFilter] = useState(false);
+  const [stockAlertFilter, setStockAlertFilter] = useState<'all' | 'warranty' | 'reminder'>('all');
 
   // General reminder notes
   const [reminders, setReminders] = useState<AppReminder[]>([]);
@@ -157,6 +157,13 @@ export default function App() {
     setSettingsTabRequest({ tab, key: Date.now() });
     setActiveTab('config');
     setGlobalStockSearch('');
+    setMobileMenuOpen(false);
+  };
+
+  const openStockAlertFilter = (filter: 'warranty' | 'reminder') => {
+    setStockAlertFilter(filter);
+    setGlobalStockSearch('');
+    setActiveTab('estoque');
     setMobileMenuOpen(false);
   };
 
@@ -395,6 +402,7 @@ export default function App() {
             return [...prev, data];
           });
           playAccountAlertSound();
+          fetchGlobalStock();
           if (Notification.permission === 'granted') {
             new Notification(`LEMBRETE: ${data.productName}`, {
               body: `${data.login} - ${data.reminderNote || 'Verificar conta'}`,
@@ -556,6 +564,11 @@ export default function App() {
       if (res.ok) setStockProducts(await res.json());
     } catch (e) { }
   };
+
+  const activeAccountReminderCount = stockProducts.reduce(
+    (total, product) => total + (product.activeReminderCount || 0),
+    0
+  );
 
   const fetchSettings = async () => {
     try {
@@ -983,12 +996,6 @@ export default function App() {
               WhatsApp
             </span>
 
-            {activeWarranties.length > 0 && (
-              <button onClick={() => { setActiveTab('estoque'); setForceWarrantyFilter(true); }} className="cursor-pointer inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 hover:bg-amber-200 dark:hover:bg-amber-500/20 transition-colors px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-500/20 shadow-xs animate-pulse">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-500" />
-                <span>{activeWarranties.length} {activeWarranties.length === 1 ? 'GARANTIA' : 'GARANTIAS'}</span>
-              </button>
-            )}
           </div>
 
           {/* Quick reminders shortcut */}
@@ -1098,6 +1105,45 @@ export default function App() {
 
       {/* 2. MAIN BODY CONTENT */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+
+        {(reminders.length > 0 || activeAccountReminderCount > 0 || activeWarranties.length > 0) && (
+          <section className="flex flex-wrap items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl shadow-2xs">
+            <span className="hidden sm:inline text-[9px] font-black uppercase text-slate-400 mr-1">Alertas ativos</span>
+
+            {reminders.length > 0 && (
+              <button
+                onClick={() => openSettingsTab('lembretes')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-violet-200 dark:border-violet-900/60 bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-950/50 transition-colors cursor-pointer"
+                title="Abrir meus lembretes"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold">{reminders.length} {reminders.length === 1 ? 'lembrete ativo' : 'lembretes ativos'}</span>
+              </button>
+            )}
+
+            {activeAccountReminderCount > 0 && (
+              <button
+                onClick={() => openStockAlertFilter('reminder')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-200 dark:border-sky-900/60 bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-950/50 transition-colors cursor-pointer"
+                title="Ver contas com alerta ativo"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold">{activeAccountReminderCount} {activeAccountReminderCount === 1 ? 'alerta de conta ativo' : 'alertas de contas ativos'}</span>
+              </button>
+            )}
+
+            {activeWarranties.length > 0 && (
+              <button
+                onClick={() => openStockAlertFilter('warranty')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-300 dark:border-amber-500/20 bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/20 transition-colors cursor-pointer"
+                title="Ver contas com garantia LZT ativa"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-bold">{activeWarranties.length} {activeWarranties.length === 1 ? 'garantia LZT ativa' : 'garantias LZT ativas'}</span>
+              </button>
+            )}
+          </section>
+        )}
 
         {/* --- DYNAMIC WEB WEBHOOK SIMULATOR PLAYGROUND BAR (EXCELLENT FOR TESTING!) --- */}
         <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl p-3 shadow-sm transition-all">
@@ -1662,8 +1708,8 @@ export default function App() {
             <EstoquePanel
               notifications={notifications}
               onUpdateNotification={handleUpdateNotification}
-              forceWarrantyFilter={forceWarrantyFilter}
-              onClearWarrantyFilter={() => setForceWarrantyFilter(false)}
+              alertFilter={stockAlertFilter}
+              onAlertFilterChange={setStockAlertFilter}
               globalSearchQuery={globalStockSearch}
             />
           </div>

@@ -8,12 +8,12 @@ import { StockProduct, StockInventoryItem, NotificationItem } from '../types';
 interface EstoquePanelProps {
   notifications: NotificationItem[];
   onUpdateNotification: (id: string, updates: Partial<NotificationItem>) => Promise<void>;
-  forceWarrantyFilter?: boolean;
-  onClearWarrantyFilter?: () => void;
+  alertFilter?: 'all' | 'warranty' | 'reminder';
+  onAlertFilterChange?: (filter: 'all' | 'warranty' | 'reminder') => void;
   globalSearchQuery?: string;
 }
 
-export default function EstoquePanel({ notifications, onUpdateNotification, forceWarrantyFilter, onClearWarrantyFilter, globalSearchQuery }: EstoquePanelProps) {
+export default function EstoquePanel({ notifications, onUpdateNotification, alertFilter = 'all', onAlertFilterChange, globalSearchQuery }: EstoquePanelProps) {
   const [products, setProducts] = useState<StockProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,11 +60,11 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
   const [reminderNote, setReminderNote] = useState('');
 
   const [sortProductBy, setSortProductBy] = useState<'alpha' | 'quantity' | 'recent'>('alpha');
-  const [filterWarranty, setFilterWarranty] = useState<'all' | 'warranty'>(forceWarrantyFilter ? 'warranty' : 'all');
+  const [filterAlert, setFilterAlert] = useState<'all' | 'warranty' | 'reminder'>(alertFilter);
 
   useEffect(() => {
-    if (forceWarrantyFilter) setFilterWarranty('warranty');
-  }, [forceWarrantyFilter]);
+    setFilterAlert(alertFilter);
+  }, [alertFilter]);
 
   useEffect(() => {
     if (globalSearchQuery !== undefined) {
@@ -251,7 +251,8 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
 
   const filteredProducts = [...products]
     .filter(p => {
-      if (filterWarranty === 'warranty' && (p.activeWarrantyCount || 0) === 0) return false;
+      if (filterAlert === 'warranty' && (p.activeWarrantyCount || 0) === 0) return false;
+      if (filterAlert === 'reminder' && (p.activeReminderCount || 0) === 0) return false;
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
       return p.name.toLowerCase().includes(q) || p.platform.toLowerCase().includes(q) || (p.category && p.category.toLowerCase().includes(q));
@@ -333,15 +334,17 @@ export default function EstoquePanel({ notifications, onUpdateNotification, forc
 
           <div className="flex-shrink-0 flex items-center gap-2">
             <select
-              value={filterWarranty}
+              value={filterAlert}
               onChange={(e) => {
-                setFilterWarranty(e.target.value as any);
-                if (e.target.value === 'all' && onClearWarrantyFilter) onClearWarrantyFilter();
+                const nextFilter = e.target.value as 'all' | 'warranty' | 'reminder';
+                setFilterAlert(nextFilter);
+                onAlertFilterChange?.(nextFilter);
               }}
               className="h-full text-xs font-bold px-3 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950/40 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
             >
               <option value="all">Todas as Contas</option>
               <option value="warranty">C/ Garantia Ativa</option>
+              <option value="reminder">C/ Alerta Ativo</option>
             </select>
             <select
               value={sortProductBy}
