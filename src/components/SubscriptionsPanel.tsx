@@ -599,6 +599,11 @@ export default function SubscriptionsPanel() {
                           {status.label}
                         </span>
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{selectedConfig.shortLabel}</span>
+                        {subscription.autoCreated && (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-cyan-500">
+                            Auto
+                          </span>
+                        )}
                         {subscription.renewalCount > 0 && (
                           <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500">
                             {subscription.renewalCount} renovação{subscription.renewalCount === 1 ? '' : 'es'}

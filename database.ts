@@ -83,6 +83,9 @@ export function initDatabase(storageDir: string): void {
       alert_due_sent INTEGER DEFAULT 0,
       renewal_count INTEGER DEFAULT 0,
       renewed_from_id TEXT,
+      source_notification_id TEXT,
+      source_order_id TEXT,
+      auto_created INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT
     );
@@ -108,6 +111,9 @@ export function initDatabase(storageDir: string): void {
   safeAlter("ALTER TABLE items ADD COLUMN reminder_at TEXT");
   safeAlter("ALTER TABLE items ADD COLUMN reminder_note TEXT");
   safeAlter("ALTER TABLE items ADD COLUMN reminder_alert_sent INTEGER DEFAULT 0");
+  safeAlter("ALTER TABLE subscriptions ADD COLUMN source_notification_id TEXT");
+  safeAlter("ALTER TABLE subscriptions ADD COLUMN source_order_id TEXT");
+  safeAlter("ALTER TABLE subscriptions ADD COLUMN auto_created INTEGER DEFAULT 0");
 
   // Try to migrate from old stock.json if it exists
   migrateFromJson(storageDir);

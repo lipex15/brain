@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Melhora o reconhecimento de vendas, perguntas, mediacoes e eventos das plataformas\n- Classifica fundos, saldo e saques da GameMarket como eventos financeiros sem inflar o faturamento\n- Limpa links e markdown dos cartoes e organiza produto, pedido, cliente e entrega\n- Envia alertas do WhatsApp com modelos proprios para cada tipo de evento\n- Soma o valor total de cada pedido uma unica vez, preservando compras com varias unidades\n- Corrige disparos duplicados no simulador interno`,
+        body: `deathStuffs ${tag}\n\n- Cria automaticamente assinaturas de Xbox Game Pass quando chega venda compatível da GGMAX ou GameMarket\n- Mantem a venda contando no faturamento normalmente, sem criar valor extra por causa da assinatura\n- Usa cliente, plataforma, pedido, link e data da venda para preencher a aba Assinaturas no padrao atual\n- Evita criar assinatura duplicada quando a mesma notificacao ou pedido ja foi processado\n- Marca assinaturas criadas pelo fluxo automatico com o selo Auto\n- Mantem eventos financeiros, entregas e fundos liberados fora da criacao de assinaturas`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

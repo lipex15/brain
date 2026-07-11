@@ -15,6 +15,7 @@ const { Client: WhatsAppClient, LocalAuth } = pkg;
 import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, type AppReminder, type SubscriptionPlatform, type SubscriptionRecord, type SubscriptionSummary } from "./src/types.js";
 import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase, exportDatabaseSnapshotBase64 } from "./database.js";
 import { cleanDiscordText, enrichStoredNotifications, inferStoredEventType, notificationDedupeKey, parseDiscordMessage as parseStructuredDiscordMessage, type DiscordEmbedData } from "./notificationParser.js";
+import { buildAutoSubscriptionDraft } from "./subscriptionAutoCreate.js";
 import cors from "cors";
 import multer from "multer";
 
@@ -239,12 +240,73 @@ process.on('message', (msg: any) => {
   }
 });
 
+function autoCreateGamePassSubscription(notif: NotificationItem) {
+  const draft = buildAutoSubscriptionDraft(notif);
+  if (!draft) return;
+
+  const existingByNotification = dbGet(
+    "SELECT id FROM subscriptions WHERE source_notification_id = ? LIMIT 1",
+    [draft.sourceNotificationId]
+  ) as any;
+  if (existingByNotification) return;
+
+  if (draft.sourceOrderId) {
+    const existingByOrder = dbGet(
+      "SELECT id FROM subscriptions WHERE platform = ? AND source_order_id = ? LIMIT 1",
+      [draft.platform, draft.sourceOrderId]
+    ) as any;
+    if (existingByOrder) return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const expiresAt = calculateSubscriptionExpiration(draft.startDate, draft.durationDays);
+
+  dbRun(
+    `INSERT INTO subscriptions (
+      id, platform, customer_name, chat_link, product_name, purchase_date, start_date,
+      duration_days, expires_at, status, notes, alert_3d_sent, alert_1d_sent, alert_due_sent,
+      renewal_count, source_notification_id, source_order_id, auto_created, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      draft.platform,
+      draft.customerName,
+      draft.chatLink,
+      draft.productName,
+      draft.purchaseDate.toISOString(),
+      draft.startDate.toISOString(),
+      draft.durationDays,
+      expiresAt.toISOString(),
+      "active",
+      draft.notes,
+      0,
+      0,
+      0,
+      0,
+      draft.sourceNotificationId,
+      draft.sourceOrderId,
+      1,
+      nowIso,
+      nowIso,
+    ]
+  );
+
+  addLog(
+    "sistema",
+    "success",
+    `Assinatura Game Pass criada automaticamente para ${draft.customerName} (${getSubscriptionPlatformName(draft.platform)}).`
+  );
+  broadcastSubscriptionsRefresh(draft.platform);
+}
+
 // NOTE: Auto-delivery is intentionally DISABLED.
 // Notifications and stock are independent systems — stock management is fully manual.
 // This function only forwards the notification to WhatsApp when applicable.
 async function tryAutoDelivery(notif: NotificationItem, shouldForward = true) {
   try {
     if (shouldForward) {
+      autoCreateGamePassSubscription(notif);
       triggerWhatsAppForward(notif);
     }
   } catch (err: any) {
@@ -1510,6 +1572,9 @@ function mapSubscription(row: any): SubscriptionRecord {
     alert1dSent: !!row.alert_1d_sent,
     alertDueSent: !!row.alert_due_sent,
     renewalCount: Number(row.renewal_count || 0),
+    sourceNotificationId: row.source_notification_id,
+    sourceOrderId: row.source_order_id,
+    autoCreated: !!row.auto_created,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     daysLeft,

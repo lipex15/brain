@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { enrichStoredNotifications, parseDiscordMessage } from '../notificationParser.ts';
 import { calculateNotificationRevenue } from '../src/notificationAccounting.ts';
+import { buildAutoSubscriptionDraft } from '../subscriptionAutoCreate.ts';
 import type { NotificationItem } from '../src/types.ts';
 
 function notification(overrides: Partial<NotificationItem>): NotificationItem {
@@ -98,4 +99,71 @@ test('histórico antigo de pedido entregue deixa de contar como venda', () => {
   assert.equal(rows[0].category, 'outros');
   assert.equal(rows[0].eventType, 'order_delivered');
 });
+test('venda de Game Pass na GGMAX vira rascunho de assinatura automatica', () => {
+  const parsed = parseDiscordMessage('', {
+    title: 'Nova Venda',
+    authorName: 'GGMAX',
+    description: [
+      '**ID da Venda:** [nzwozok](https://ggmax.com.br/conta/pedido/nzwozok)',
+      '**Valor:** R$ 4,87',
+      '**Cliente:** donafifi',
+      '**Anuncio:** [XBOX GAMEPASS ULTIMATE](https://ggmax.com.br/anuncio/xbox-gamepass) > [PC] GAMEPASS ULTIMATE 30 DIAS',
+    ].join('\n'),
+  });
 
+  const draft = buildAutoSubscriptionDraft(notification({
+    ...parsed,
+    id: 'notif-ggmax-gamepass',
+    externalId: 'discord-msg-ggmax-gamepass',
+    timestamp: '2026-07-11T03:00:00.000Z',
+  }));
+
+  assert.ok(draft);
+  assert.equal(draft.platform, 'ggmax');
+  assert.equal(draft.customerName, 'donafifi');
+  assert.equal(draft.sourceOrderId, 'nzwozok');
+  assert.equal(draft.durationDays, 30);
+  assert.equal(draft.productName, 'Xbox Game Pass Ultimate 30 dias');
+  assert.equal(draft.chatLink, 'https://ggmax.com.br/conta/pedido/nzwozok');
+});
+
+test('venda de Game Pass na GameMarket vira assinatura, mas financeiro nao vira', () => {
+  const base = { authorName: 'GAMEMARKET', footer: 'GameMarket - gamemarket.com.br' };
+  const sale = parseDiscordMessage('', {
+    ...base,
+    title: 'Voce teve uma nova venda no GameMarket!',
+    fields: [
+      { name: 'Pedido', value: '#KQVL2Y9' },
+      { name: 'Produto', value: '[CONSOLE] GAMEPASS ULTIMATE - XBOX GAMEPASS ULTIMATE 30 DIAS' },
+      { name: 'Comprador', value: 'daniedss' },
+      { name: 'Valor', value: 'R$ 5.00' },
+    ],
+  });
+  const funds = parseDiscordMessage('', {
+    ...base,
+    title: 'Fundos Liberados',
+    fields: [
+      { name: 'Pedido', value: '#KQVL2Y9' },
+      { name: 'Valor Liquido', value: 'R$ 4.25' },
+    ],
+  });
+
+  const saleDraft = buildAutoSubscriptionDraft(notification({
+    ...sale,
+    id: 'notif-gm-gamepass',
+    externalId: 'discord-msg-gm-gamepass',
+    timestamp: '2026-07-11T03:00:00.000Z',
+  }));
+  const fundsDraft = buildAutoSubscriptionDraft(notification({
+    ...funds,
+    id: 'notif-gm-funds',
+    externalId: 'discord-msg-gm-funds',
+    timestamp: '2026-07-11T03:00:00.000Z',
+  }));
+
+  assert.ok(saleDraft);
+  assert.equal(saleDraft.platform, 'gamemarket');
+  assert.equal(saleDraft.customerName, 'daniedss');
+  assert.equal(saleDraft.sourceOrderId, 'KQVL2Y9');
+  assert.equal(fundsDraft, null);
+});

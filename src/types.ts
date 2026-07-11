@@ -153,6 +153,9 @@ export interface SubscriptionRecord {
   alert1dSent: boolean;
   alertDueSent: boolean;
   renewalCount: number;
+  sourceNotificationId?: string | null;
+  sourceOrderId?: string | null;
+  autoCreated?: boolean;
   createdAt: string;
   updatedAt?: string | null;
   daysLeft: number;
