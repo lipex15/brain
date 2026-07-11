@@ -14,6 +14,7 @@ import pkg from "whatsapp-web.js";
 const { Client: WhatsAppClient, LocalAuth } = pkg;
 import { AppSettings, NotificationItem, SystemStatus, LiveLog, DEFAULT_SETTINGS, NotificationPlatform, NotificationPriority, NotificationCategory, type AppReminder, type SubscriptionPlatform, type SubscriptionRecord, type SubscriptionSummary } from "./src/types.js";
 import { initDatabase, dbRun, dbAll, dbGet, getStockSummary, closeDatabase, exportDatabaseSnapshotBase64 } from "./database.js";
+import { cleanDiscordText, enrichStoredNotifications, inferStoredEventType, notificationDedupeKey, parseDiscordMessage as parseStructuredDiscordMessage, type DiscordEmbedData } from "./notificationParser.js";
 import cors from "cors";
 import multer from "multer";
 
@@ -23,7 +24,7 @@ const _filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath
 const _dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(_filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 
 
@@ -80,6 +81,13 @@ app.post('/api/upload-bg', upload.single('bg'), (req, res) => {
 
 // --- 1. DYNAMIC STORAGE PATHS ---
 function getStorageFolder(): string {
+  const explicitStorageDir = process.env.DSB_STORAGE_DIR?.trim();
+  if (explicitStorageDir) {
+    const resolvedDir = path.resolve(explicitStorageDir);
+    if (!fs.existsSync(resolvedDir)) fs.mkdirSync(resolvedDir, { recursive: true });
+    return resolvedDir;
+  }
+
   const isElectron = !!process.versions.electron || process.env.IS_ELECTRON === 'true';
   const defaultBaseDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
   let defaultDir = path.join(defaultBaseDir, "deathstuffs-brain");
@@ -190,7 +198,7 @@ initDatabase(STORAGE_DIR);
 // --- 2. GLOBAL APP STATE ---
 let settings = loadSettings();
 let notifications = loadNotifications();
-if (normalizeStoredNotificationClassifications(notifications)) {
+if (enrichStoredNotifications(notifications)) {
   saveNotifications(notifications);
 }
 let sseClients: express.Response[] = [];
@@ -633,41 +641,61 @@ function startDiscordBot() {
   }
 }
 
+function getDiscordEmbedData(message: Message): DiscordEmbedData {
+  const embed = message.embeds && message.embeds[0];
+  return embed ? {
+    title: embed.title || "",
+    description: embed.description || "",
+    fields: (embed.fields || []).map((field) => ({ name: field.name, value: field.value, inline: field.inline })),
+    footer: embed.footer?.text || "",
+    authorName: message.author?.username || "",
+    url: embed.url || "",
+  } : {
+    authorName: message.author?.username || "",
+  };
+}
+
+function isDuplicateDiscordNotification(externalId: string) {
+  // The same order may legitimately generate one message per purchased unit.
+  // Only the Discord message ID is safe enough to suppress automatically.
+  return notifications.some((item) => item.externalId === externalId);
+}
+
+function createNotificationFromDiscordMessage(message: Message): NotificationItem | null {
+  const parsed = parseStructuredDiscordMessage(message.content, getDiscordEmbedData(message));
+  const timestamp = message.createdAt ? message.createdAt.toISOString() : new Date().toISOString();
+  if (isDuplicateDiscordNotification(message.id)) return null;
+
+  return {
+    id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    externalId: message.id,
+    platform: parsed.platform || "outros",
+    title: parsed.title || "Notificação recebida",
+    description: parsed.description || cleanDiscordText(message.content) || "Sem conteúdo",
+    buyerName: parsed.buyerName || "N/A",
+    itemName: parsed.itemName || "Produto Desconhecido",
+    price: parsed.price,
+    timestamp,
+    priority: parsed.priority || "normal",
+    category: parsed.category || "outros",
+    status: "nao_vista",
+    resolution: "pendente",
+    discordLink: `https://discord.com/channels/${message.guildId || "@me"}/${message.channelId}/${message.id}`,
+    eventType: parsed.eventType || "other",
+    orderId: parsed.orderId,
+    actionUrl: parsed.actionUrl,
+    productUrl: parsed.productUrl,
+    adName: parsed.adName,
+    deliveryStatus: parsed.deliveryStatus,
+    dedupeKey: notificationDedupeKey(parsed),
+    rawPayload: parsed.rawPayload,
+  };
+}
+
 function handleIncomingDiscordMessage(message: Message) {
   try {
-    // Check if message is already recorded to prevent duplicate
-    if (notifications.some((n) => n.externalId === message.id)) return;
-
-    // Extract content and first embed details if exists
-    const embed = message.embeds && message.embeds[0];
-    const embedData = embed ? {
-      title: embed.title || "",
-      description: embed.description || "",
-      fields: embed.fields || [],
-      footer: embed.footer?.text || "",
-      authorName: message.author?.username || "",
-    } : {
-      authorName: message.author?.username || "",
-    };
-
-    const parsed = parseDiscordMessage(message.content, embedData);
-
-    const newNotification: NotificationItem = {
-      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      externalId: message.id,
-      platform: parsed.platform || "outros",
-      title: parsed.title || "Notificação Recebida",
-      description: parsed.description || message.content || "Sem conteúdo",
-      buyerName: parsed.buyerName || "N/A",
-      itemName: parsed.itemName || "Item Desconhecido",
-      price: parsed.price,
-      timestamp: message.createdAt ? message.createdAt.toISOString() : new Date().toISOString(),
-      priority: parsed.priority || "normal",
-      category: parsed.category || "venda",
-      status: "nao_vista",
-      resolution: "pendente",
-      discordLink: `https://discord.com/channels/${message.guildId || "@me"}/${message.channelId}/${message.id}`,
-    };
+    const newNotification = createNotificationFromDiscordMessage(message);
+    if (!newNotification) return;
 
     notifications.unshift(newNotification);
     saveNotifications(notifications);
@@ -717,37 +745,8 @@ async function syncDiscordHistory() {
 
         for (const msg of sortedMsgs) {
           if (msg.author && msg.author.id === discordClient.user?.id) continue;
-          if (notifications.some((n) => n.externalId === msg.id)) continue;
-
-          // Parse and add
-          const embed = msg.embeds && msg.embeds[0];
-          const embedData = embed ? {
-            title: embed.title || "",
-            description: embed.description || "",
-            fields: embed.fields || [],
-            footer: embed.footer?.text || "",
-            authorName: msg.author?.username || "",
-          } : {
-            authorName: msg.author?.username || "",
-          };
-
-          const parsed = parseDiscordMessage(msg.content, embedData);
-          const newNotif: NotificationItem = {
-            id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            externalId: msg.id,
-            platform: parsed.platform || "outros",
-            title: parsed.title || "Notificação Sincronizada",
-            description: parsed.description || msg.content || "Sem conteúdo",
-            buyerName: parsed.buyerName || "N/A",
-            itemName: parsed.itemName || "Item Desconhecido",
-            price: parsed.price,
-            timestamp: msg.createdAt ? msg.createdAt.toISOString() : new Date().toISOString(),
-            priority: parsed.priority || "normal",
-            category: parsed.category || "venda",
-            status: "nao_vista",
-            resolution: "pendente",
-            discordLink: `https://discord.com/channels/${msg.guildId || "@me"}/${msg.channelId}/${msg.id}`,
-          };
+          const newNotif = createNotificationFromDiscordMessage(msg);
+          if (!newNotif) continue;
 
           notifications.unshift(newNotif);
           addedCount++;
@@ -1233,13 +1232,89 @@ function simulateWhatsAppScan() {
   addLog("whatsapp", "warn", "Simulação nativa desativada. Escaneie o QR exibido com o seu celular no app WhatsApp.");
 }
 
+function formatNotificationMoney(value?: number) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+    : "";
+}
+
+function buildWhatsAppNotification(notif: NotificationItem, deliveredItem: any = null) {
+  const eventType = inferStoredEventType(notif);
+  const platformName = notif.platform === "ggmax"
+    ? "🔵 GGMAX"
+    : notif.platform === "gamemarket"
+      ? "🟢 GameMarket"
+      : notif.platform === "desapego"
+        ? "🟠 Desapego"
+        : "⚪ Sistema";
+  const eventLabels: Record<string, string> = {
+    sale: "NOVA VENDA",
+    question: "NOVA PERGUNTA",
+    complaint: "MEDIAÇÃO / PROBLEMA",
+    review: "NOVA AVALIAÇÃO",
+    funds_released: "FUNDOS LIBERADOS",
+    balance_updated: "SALDO ATUALIZADO",
+    withdrawal_requested: "SAQUE SOLICITADO",
+    order_completed: "PEDIDO FINALIZADO",
+    order_delivered: "PEDIDO ENTREGUE",
+    product_created: "PRODUTO CRIADO",
+    other: "NOVA ATUALIZAÇÃO",
+  };
+  const itemName = cleanDiscordText(notif.itemName || "");
+  const buyerName = cleanDiscordText(notif.buyerName || "");
+  const description = cleanDiscordText(notif.description || "");
+  const orderId = cleanDiscordText(notif.orderId || "");
+  const deliveryStatus = cleanDiscordText(notif.deliveryStatus || "");
+  const hasItem = itemName && !/^(produto|item) desconhecido$/i.test(itemName);
+  const hasBuyer = buyerName && buyerName.toLowerCase() !== "n/a";
+  const price = formatNotificationMoney(notif.price);
+  const lines = [`${platformName} | *${eventLabels[eventType] || eventLabels.other}*`, ""];
+
+  if (eventType === "sale") {
+    if (hasItem) lines.push(`🎮 *Produto:* ${itemName}`);
+    if (price) lines.push(`💰 *Valor:* ${price}`);
+    if (hasBuyer) lines.push(`👤 *Cliente:* ${buyerName}`);
+    if (orderId) lines.push(`🧾 *Pedido:* ${orderId}`);
+    if (deliveryStatus) lines.push(`📦 *Entrega:* ${deliveryStatus}`);
+  } else if (eventType === "question") {
+    if (hasBuyer) lines.push(`👤 *Cliente:* ${buyerName}`);
+    if (hasItem) lines.push(`📦 *Produto:* ${itemName}`);
+    if (description) lines.push(`💬 ${description}`);
+  } else if (eventType === "complaint") {
+    if (orderId) lines.push(`🧾 *Pedido:* ${orderId}`);
+    if (hasItem) lines.push(`📦 *Produto:* ${itemName}`);
+    if (hasBuyer) lines.push(`👤 *Cliente:* ${buyerName}`);
+    if (description) lines.push(`⚠️ ${description}`);
+  } else if (["funds_released", "balance_updated", "withdrawal_requested"].includes(eventType)) {
+    if (price) lines.push(`💰 *Valor:* ${price}`);
+    if (orderId) lines.push(`🧾 *Referência:* ${orderId}`);
+    if (hasItem) lines.push(`📦 *Produto:* ${itemName}`);
+    if (description) lines.push(`ℹ️ ${description}`);
+    lines.push("📊 Evento financeiro, não contabilizado como venda.");
+  } else {
+    if (hasItem) lines.push(`📦 *Produto:* ${itemName}`);
+    if (hasBuyer) lines.push(`👤 *Cliente:* ${buyerName}`);
+    if (orderId) lines.push(`🧾 *Pedido:* ${orderId}`);
+    if (description) lines.push(`ℹ️ ${description}`);
+  }
+
+  if (deliveredItem) {
+    lines.push("", "✅ *ENTREGUE AUTOMATICAMENTE*", "", "🔑 *Dados de acesso*");
+    lines.push(`👤 *Login/Usuário:* ${deliveredItem.login || deliveredItem.content || "N/A"}`);
+    if (deliveredItem.senha) lines.push(`🔒 *Senha:* ${deliveredItem.senha}`);
+    if (deliveredItem.email) lines.push(`📧 *E-mail:* ${deliveredItem.email}`);
+    if (deliveredItem.senhaEmail) lines.push(`🔑 *Senha do e-mail:* ${deliveredItem.senhaEmail}`);
+    if (deliveredItem.observacao) lines.push(`📝 *Observação:* ${deliveredItem.observacao}`);
+  }
+
+  const actionUrl = notif.actionUrl || notif.productUrl || notif.discordLink;
+  if (actionUrl) lines.push("", `🔗 *Abrir detalhes:* ${actionUrl}`);
+  lines.push("", "_Abra o deathstuffs brain para gerenciar este alerta._");
+  return lines.join("\n");
+}
+
 function triggerWhatsAppForward(notif: NotificationItem, deliveredItem: any = null) {
   if (!settings.whatsapp.enabled || whatsappStatus.status !== 'conectado' || !wpClient) return;
-
-  if (notif.category === "outros") {
-    addLog("whatsapp", "info", "Alerta administrativo ignorado no WhatsApp para evitar confusao com venda.");
-    return;
-  }
 
   // Filter based on Priority and Platform filters
   const matchesPriority = settings.whatsapp.priorities.includes(notif.priority);
@@ -1256,53 +1331,7 @@ function triggerWhatsAppForward(notif: NotificationItem, deliveredItem: any = nu
     return;
   }
 
-  // Format message body beautifully
-  const emojiPlat = notif.platform === 'ggmax' ? '🔵 GGMAX' : notif.platform === 'gamemarket' ? '🟢 GameMarket' : notif.platform === 'desapego' ? '🟠 Desapego' : '🛒 Outro';
-  const priceText = notif.price ? `R$ ${notif.price.toFixed(2)}` : 'N/A';
-
-  let text = `🚨 *NOTIFICAÇÃO SELLERHUB* 🚨\n\n`;
-  text += `🎮 *Plataforma:* ${emojiPlat}\n`;
-  text += `📋 *Tipo:* ${notif.title}\n`;
-  text += `📦 *Item:* ${notif.itemName}\n`;
-  text += `💰 *Preço:* ${priceText}\n`;
-  text += `👤 *Comprador:* ${notif.buyerName || 'N/A'}\n\n`;
-
-  if (deliveredItem) {
-    text += `✅ *STATUS:* ENTREGUE AUTOMATICAMENTE\n\n`;
-    text += `🔑 *DADOS DE ACESSO DA CONTA*\n`;
-    text += `👤 *Login/Usuário:* *${deliveredItem.login || deliveredItem.content}*\n`;
-    if (deliveredItem.senha) {
-      text += `🔒 *Senha:* *${deliveredItem.senha}*\n`;
-    }
-    if (deliveredItem.email) {
-      text += `📧 *E-mail da Conta:* *${deliveredItem.email}*\n`;
-    }
-    if (deliveredItem.senhaEmail) {
-      text += `🔑 *Senha do E-mail:* \`${deliveredItem.senhaEmail}\`\n`;
-    }
-    if (deliveredItem.observacao) {
-      text += `📝 *Observação:* ${deliveredItem.observacao}\n`;
-    }
-
-    // Additional optional details
-    if (deliveredItem.dataNascimento) {
-      text += `📅 *Nascimento:* ${deliveredItem.dataNascimento}\n`;
-    }
-    if (deliveredItem.perguntaSecreta) {
-      text += `❓ *Pergunta Secreta:* ${deliveredItem.perguntaSecreta}\n`;
-    }
-    if (deliveredItem.respostaSecreta) {
-      text += `💡 *Resposta:* ${deliveredItem.respostaSecreta}\n`;
-    }
-    if (deliveredItem.paisCadastro) {
-      text += `🇧🇷 *País:* ${deliveredItem.paisCadastro}\n`;
-    }
-  } else {
-    text += `⏳ *Status:* Pendente\n`;
-    text += `⚡ *Prioridade:* ${notif.priority.toUpperCase()}\n`;
-  }
-
-  text += `\n_Acesse o software para responder e gerenciar._`;
+  const text = buildWhatsAppNotification(notif, deliveredItem);
 
   const targetId = `${phone.replace(/\D/g, '')}@c.us`;
   wpClient.sendMessage(targetId, text).then(() => {
@@ -2110,6 +2139,13 @@ app.post("/api/notifications", (req, res) => {
     status: "nao_vista",
     resolution: "pendente",
     notes: body.notes || "",
+    eventType: body.eventType || undefined,
+    orderId: body.orderId || undefined,
+    actionUrl: body.actionUrl || undefined,
+    productUrl: body.productUrl || undefined,
+    adName: body.adName || undefined,
+    deliveryStatus: body.deliveryStatus || undefined,
+    dedupeKey: body.dedupeKey || undefined,
   };
 
   notifications.unshift(newNotif);
@@ -2903,14 +2939,13 @@ app.post("/api/notifications/test-trigger", (req, res) => {
   };
 
   notifications.unshift(testNotif);
-  saveNotifications(testNotif ? [testNotif, ...notifications] : notifications);
+  saveNotifications(notifications);
   broadcastEvent("notification_new", testNotif);
 
   // Try automatic delivery from SQLite stock
   tryAutoDelivery(testNotif);
 
   addLog("sistema", "success", `[Simulado] Webhook disparado com sucesso: ${itemName}`);
-  triggerWhatsAppForward(testNotif);
 
   res.json(testNotif);
 });

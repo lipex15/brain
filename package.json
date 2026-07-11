@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "1.1.17",
+  "version": "1.1.18",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -10,6 +10,7 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "test:notifications": "tsx --test tests/notification-flow.test.ts",
     "electron-dev": "concurrently \"tsx server.ts\" \"wait-on http://localhost:3000 && electron main.cjs\"",
     "electron-pack": "npm run build && electron-builder",
     "postinstall": "electron-rebuild -f -w better-sqlite3"

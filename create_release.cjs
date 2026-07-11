@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Remove definitivamente o retangulo branco criado pelo navegador interno do WhatsApp\n- Mantem a janela tecnica fora da area visivel do Windows sem reduzir a area interna do WhatsApp Web\n- Preserva a conexao do WhatsApp e todos os dados e configuracoes existentes`,
+        body: `deathStuffs ${tag}\n\n- Melhora o reconhecimento de vendas, perguntas, mediacoes e eventos das plataformas\n- Classifica fundos, saldo e saques da GameMarket como eventos financeiros sem inflar o faturamento\n- Limpa links e markdown dos cartoes e organiza produto, pedido, cliente e entrega\n- Envia alertas do WhatsApp com modelos proprios para cada tipo de evento\n- Soma o valor total de cada pedido uma unica vez, preservando compras com varias unidades\n- Corrige disparos duplicados no simulador interno`,
         draft: false,
         prerelease: false,
         make_latest: 'true'

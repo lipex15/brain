@@ -24,7 +24,8 @@ import {
   HelpCircle,
   TrendingUp,
   Tag,
-  PackageCheck
+  PackageCheck,
+  WalletCards
 } from 'lucide-react';
 import { NotificationItem, NotificationPlatform, NotificationPriority, NotificationCategory, StockProduct } from '../types';
 
@@ -35,6 +36,14 @@ interface NotificationCardProps {
   onNavigateToStock?: (searchQuery: string) => void;
   onUpdate: (id: string, updates: Partial<NotificationItem>) => void | Promise<void>;
   onDelete: (id: string) => void | Promise<void>;
+}
+
+function cleanDisplayText(value?: string) {
+  return String(value || '')
+    .replace(/\[([^\n]*?)\]\((https?:\/\/[^)\s]+)\)/g, '$1')
+    .replace(/\*{1,3}|_{2,3}|~{2}|`+/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 export default function NotificationCard({ notification, stockProducts = [], onNavigateToStock, onUpdate, onDelete }: NotificationCardProps) {
@@ -128,6 +137,11 @@ export default function NotificationCard({ notification, stockProducts = [], onN
       color: 'bg-indigo-100/80 text-indigo-800 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/60',
       icon: <MessageSquare className="w-3.5 h-3.5 mr-1" />
     },
+    financeiro: {
+      label: 'Financeiro',
+      color: 'bg-cyan-100/80 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-900/60',
+      icon: <WalletCards className="w-3.5 h-3.5 mr-1" />
+    },
     outros: {
       label: 'Outros',
       color: 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-300',
@@ -170,6 +184,15 @@ export default function NotificationCard({ notification, stockProducts = [], onN
     }) || null;
   }
   // -----------------------------
+
+  const cleanItemName = cleanDisplayText(notification.itemName);
+  const hasKnownItem = !!cleanItemName && !/^(produto|item) desconhecido$/i.test(cleanItemName);
+  const cleanTitle = cleanDisplayText(notification.title);
+  const primaryTitle = notification.category === 'venda' && hasKnownItem ? cleanItemName : cleanTitle;
+  const secondaryTitle = notification.category !== 'venda' && hasKnownItem ? cleanItemName : cleanDisplayText(notification.adName);
+  const cleanBuyerName = cleanDisplayText(notification.buyerName);
+  const hasKnownBuyer = !!cleanBuyerName && cleanBuyerName.toLowerCase() !== 'n/a';
+  const actionUrl = notification.actionUrl || notification.productUrl;
 
   return (
     <motion.div
@@ -228,18 +251,23 @@ export default function NotificationCard({ notification, stockProducts = [], onN
             </div>
 
             <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm md:text-base tracking-tight truncate">
-              {notification.itemName !== 'Produto Desconhecido' ? notification.itemName : notification.title}
+              {primaryTitle}
             </h3>
+            {secondaryTitle && secondaryTitle !== primaryTitle && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{secondaryTitle}</p>
+            )}
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {notification.price && (
+              {typeof notification.price === 'number' && notification.price > 0 && (
                 <span className="font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded-md">
-                  R$ {notification.price.toFixed(2)}
+                  {notification.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
               )}
-              {notification.buyerName && (
-                <span>Comprador: <strong className="text-slate-700 dark:text-slate-300 font-medium">{notification.buyerName}</strong></span>
+              {hasKnownBuyer && (
+                <span>Cliente: <strong className="text-slate-700 dark:text-slate-300 font-medium">{cleanBuyerName}</strong></span>
               )}
+              {notification.orderId && <span>Pedido: <strong className="text-slate-700 dark:text-slate-300 font-medium">{cleanDisplayText(notification.orderId)}</strong></span>}
+              {notification.deliveryStatus && <span>Entrega: <strong className="text-slate-700 dark:text-slate-300 font-medium">{cleanDisplayText(notification.deliveryStatus)}</strong></span>}
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 {new Date(notification.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ({new Date(notification.timestamp).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})
@@ -303,11 +331,23 @@ export default function NotificationCard({ notification, stockProducts = [], onN
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Conteúdo Original da Notificação</h4>
                 <div className="p-3 bg-white/70 dark:bg-slate-800/60 rounded-lg border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto font-sans">
-                  {notification.description}
+                  {cleanDisplayText(notification.description)}
                 </div>
 
                 {/* External Links */}
                 <div className="flex gap-2 pt-1">
+                  {actionUrl && (
+                    <a
+                      id={`link-action-${notification.id}`}
+                      href={actionUrl}
+                      target="_blank"
+                      referrerPolicy="no-referrer"
+                      className="inline-flex items-center text-xs font-semibold text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/30 px-2.5 py-1.5 rounded-md border border-emerald-200 dark:border-emerald-900/50"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                      Abrir na plataforma
+                    </a>
+                  )}
                   {notification.discordLink && (
                     <a
                       id={`link-discord-${notification.id}`}

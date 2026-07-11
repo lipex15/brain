@@ -31,7 +31,19 @@ export interface AppSettings {
 
 export type NotificationPlatform = 'ggmax' | 'gamemarket' | 'desapego' | 'outros';
 export type NotificationPriority = 'normal' | 'alta' | 'urgente';
-export type NotificationCategory = 'venda' | 'reclamacao' | 'pergunta' | 'outros';
+export type NotificationCategory = 'venda' | 'reclamacao' | 'pergunta' | 'financeiro' | 'outros';
+export type NotificationEventType =
+  | 'sale'
+  | 'question'
+  | 'complaint'
+  | 'review'
+  | 'funds_released'
+  | 'balance_updated'
+  | 'withdrawal_requested'
+  | 'order_completed'
+  | 'order_delivered'
+  | 'product_created'
+  | 'other';
 export type NotificationStatus = 'nao_vista' | 'vista' | 'deletado';
 export type ResolutionStatus = 'pendente' | 'resolvida';
 
@@ -51,6 +63,22 @@ export interface NotificationItem {
   resolution: ResolutionStatus;
   notes?: string;
   discordLink?: string;
+  eventType?: NotificationEventType;
+  orderId?: string;
+  actionUrl?: string;
+  productUrl?: string;
+  adName?: string;
+  deliveryStatus?: string;
+  dedupeKey?: string;
+  rawPayload?: {
+    content?: string;
+    title?: string;
+    description?: string;
+    fields?: Array<{ name: string; value: string; inline?: boolean }>;
+    footer?: string;
+    authorName?: string;
+    url?: string;
+  };
 }
 
 export interface StockProduct {

@@ -77,6 +77,7 @@ import SettingsPanel from './components/SettingsPanel';
 import WhatsAppConnector from './components/WhatsAppConnector';
 import EstoquePanel from './components/EstoquePanel';
 import SubscriptionsPanel from './components/SubscriptionsPanel';
+import { calculateNotificationRevenue } from './notificationAccounting';
 
 export default function App() {
   // Navigation
@@ -226,6 +227,31 @@ export default function App() {
     }
   };
 
+  const playIncomingNotificationSound = (notification: NotificationItem) => {
+    if (notification.category === 'venda') {
+      playAlertSound();
+      return;
+    }
+    if (soundMuted || !settings.general.soundEnabled) return;
+    try {
+      const audioCtx = createAudioContext();
+      if (notification.category === 'reclamacao') {
+        playTone(audioCtx, 220, 0.00, 0.16, 'sawtooth', 0.18);
+        playTone(audioCtx, 174.61, 0.20, 0.16, 'sawtooth', 0.18);
+        playTone(audioCtx, 220, 0.40, 0.24, 'square', 0.16);
+      } else if (notification.category === 'pergunta') {
+        playTone(audioCtx, 523.25, 0.00, 0.16, 'triangle', 0.14);
+        playTone(audioCtx, 783.99, 0.18, 0.24, 'triangle', 0.13);
+      } else if (notification.category === 'financeiro') {
+        playTone(audioCtx, 293.66, 0.00, 0.12, 'sine', 0.13);
+        playTone(audioCtx, 369.99, 0.14, 0.12, 'sine', 0.12);
+        playTone(audioCtx, 440.00, 0.28, 0.22, 'sine', 0.11);
+      } else {
+        playTone(audioCtx, 392.00, 0.00, 0.20, 'sine', 0.11);
+      }
+    } catch (e) { }
+  };
+
   const playWarrantySound = () => {
     if (soundMuted || !settings.general.soundEnabled) return;
     try {
@@ -317,13 +343,22 @@ export default function App() {
           window.dispatchEvent(new Event('subscriptions_refresh'));
         } else if (type === 'notification_new') {
           setNotifications((prev) => [data, ...prev]);
-          playAlertSound();
+          playIncomingNotificationSound(data);
 
           // Trigger native browser notification if enabled
           if (settings.general.browserAlerts && Notification.permission === 'granted') {
-            const body = data.price ? `R$ ${data.price.toFixed(2)} - Comprador: ${data.buyerName}` : data.description;
-            new Notification(`${data.title}: ${data.itemName}`, {
-              body,
+            const clean = (value?: string) => String(value || '')
+              .replace(/\[([^\n]*?)\]\((https?:\/\/[^)\s]+)\)/g, '$1')
+              .replace(/\*{1,3}|_{2,3}|~{2}|`+/g, '')
+              .trim();
+            const details = [
+              data.itemName && !/^(produto|item) desconhecido$/i.test(data.itemName) ? clean(data.itemName) : '',
+              typeof data.price === 'number' ? data.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '',
+              data.buyerName && data.buyerName !== 'N/A' ? `Cliente: ${clean(data.buyerName)}` : '',
+              data.orderId ? `Pedido: ${clean(data.orderId)}` : '',
+            ].filter(Boolean);
+            new Notification(clean(data.title), {
+              body: details.join(' • ') || clean(data.description),
               icon: '/favicon.ico'
             });
           }
@@ -692,9 +727,7 @@ export default function App() {
 
   // --- STATISTICS COMPUTING ---
   const salesCount = notifications.filter((n) => n.category === 'venda').length;
-  const totalRevenue = notifications
-    .filter((n) => n.category === 'venda' && n.price)
-    .reduce((sum, n) => sum + (n.price || 0), 0);
+  const totalRevenue = calculateNotificationRevenue(notifications);
 
   const pendingComplaints = notifications.filter(
     (n) => n.category === 'reclamacao' && n.resolution === 'pendente'
@@ -709,17 +742,17 @@ export default function App() {
   // Platform specific breakdown values
   const ggmaxStats = {
     sales: notifications.filter((n) => n.platform === 'ggmax' && n.category === 'venda').length,
-    revenue: notifications.filter((n) => n.platform === 'ggmax' && n.category === 'venda' && n.price).reduce((sum, n) => sum + (n.price || 0), 0)
+    revenue: calculateNotificationRevenue(notifications, 'ggmax')
   };
 
   const gamemarketStats = {
     sales: notifications.filter((n) => n.platform === 'gamemarket' && n.category === 'venda').length,
-    revenue: notifications.filter((n) => n.platform === 'gamemarket' && n.category === 'venda' && n.price).reduce((sum, n) => sum + (n.price || 0), 0)
+    revenue: calculateNotificationRevenue(notifications, 'gamemarket')
   };
 
   const desapegoStats = {
     sales: notifications.filter((n) => n.platform === 'desapego' && n.category === 'venda').length,
-    revenue: notifications.filter((n) => n.platform === 'desapego' && n.category === 'venda' && n.price).reduce((sum, n) => sum + (n.price || 0), 0)
+    revenue: calculateNotificationRevenue(notifications, 'desapego')
   };
 
   // --- FILTERING AND SORTING APPLICATION ---
@@ -1447,6 +1480,7 @@ export default function App() {
                           <option value="venda">Vendas</option>
                           <option value="reclamacao">Reclamações</option>
                           <option value="pergunta">Perguntas</option>
+                          <option value="financeiro">Financeiro</option>
                           <option value="outros">Outros</option>
                         </select>
                       </div>
