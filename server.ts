@@ -1746,6 +1746,7 @@ function startAccountReminderChecker() {
          JOIN products ON items.product_id = products.id
          WHERE items.reminder_at IS NOT NULL
            AND items.reminder_at <= ?
+           AND items.status = 'disponivel'
            AND (items.reminder_alert_sent = 0 OR items.reminder_alert_sent IS NULL)`,
         [nowIso]
       );
@@ -2733,10 +2734,20 @@ app.put("/api/stock/items/:itemId", async (req, res) => {
     const { itemId } = req.params;
     const { content, status, sold_to, sold_at, notification_id } = req.body;
 
-    await dbRun(
-      "UPDATE items SET content = ?, status = ?, sold_to = ?, sold_at = ?, notification_id = ? WHERE id = ?",
-      [content, status, sold_to, sold_at, notification_id, itemId]
-    );
+    if (status === 'vendido') {
+      await dbRun(
+        `UPDATE items
+         SET content = ?, status = ?, sold_to = ?, sold_at = ?, notification_id = ?,
+             reminder_at = NULL, reminder_note = NULL, reminder_alert_sent = 1
+         WHERE id = ?`,
+        [content, status, sold_to, sold_at, notification_id, itemId]
+      );
+    } else {
+      await dbRun(
+        "UPDATE items SET content = ?, status = ?, sold_to = ?, sold_at = ?, notification_id = ? WHERE id = ?",
+        [content, status, sold_to, sold_at, notification_id, itemId]
+      );
+    }
 
     const refreshed = await getStockSummary();
     broadcastEvent("stock_refresh", refreshed);
@@ -2774,7 +2785,10 @@ app.post("/api/stock/products/:productId/deliver-manual", async (req, res) => {
 
     // Mark as sold
     await dbRun(
-      "UPDATE items SET status = 'vendido', sold_to = ?, sold_at = ?, notification_id = ? WHERE id = ?",
+      `UPDATE items
+       SET status = 'vendido', sold_to = ?, sold_at = ?, notification_id = ?,
+           reminder_at = NULL, reminder_note = NULL, reminder_alert_sent = 1
+       WHERE id = ?`,
       [buyerName || "Cliente Manual", new Date().toISOString(), notificationId || null, item.id]
     );
 

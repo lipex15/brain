@@ -735,19 +735,19 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                                         <ShieldCheck className="w-2.5 h-2.5" /> Expirada
                                                       </span>
                                                     )}
-                                                    {reminderPending && (
+                                                    {!isSold && reminderPending && (
                                                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-800 dark:text-indigo-300" title={item.reminderNote || 'Alerta pendente'}>
                                                         <Bell className="w-2.5 h-2.5" />
                                                         {formatTimeLeft(reminderMs!)}
                                                       </span>
                                                     )}
-                                                    {reminderDue && (
+                                                    {!isSold && reminderDue && (
                                                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400 animate-pulse" title={item.reminderNote || 'Alerta vencido'}>
                                                         <Bell className="w-2.5 h-2.5" />
                                                         Agora
                                                       </span>
                                                     )}
-                                                    {reminderSent && (
+                                                    {!isSold && reminderSent && (
                                                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded-full border bg-slate-100 border-slate-200 text-slate-400 dark:bg-slate-800 dark:border-slate-700" title={item.reminderNote || 'Alerta enviado'}>
                                                         <Bell className="w-2.5 h-2.5" />
                                                         Enviado
@@ -860,7 +860,7 @@ outro_login:senha123:email@rambler.ru:senhaEmail456"
                                                         </div>
                                                       </div>
 
-                                                      {item.reminderAt && (
+                                                      {!isSold && item.reminderAt && (
                                                         <div className="md:col-span-2 bg-indigo-50/70 dark:bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-900/50">
                                                           <div className="flex items-center justify-between gap-3 mb-1">
                                                             <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider block leading-none">Alerta de Conta</span>

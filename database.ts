@@ -115,6 +115,16 @@ export function initDatabase(storageDir: string): void {
   safeAlter("ALTER TABLE subscriptions ADD COLUMN source_order_id TEXT");
   safeAlter("ALTER TABLE subscriptions ADD COLUMN auto_created INTEGER DEFAULT 0");
 
+  // Sold accounts no longer need pending reminders. This also repairs older records.
+  const clearedSoldReminders = db.prepare(`
+    UPDATE items
+    SET reminder_at = NULL, reminder_note = NULL, reminder_alert_sent = 1
+    WHERE status = 'vendido' AND reminder_at IS NOT NULL
+  `).run();
+  if (clearedSoldReminders.changes > 0) {
+    console.log(`[SQLite] Alertas removidos de ${clearedSoldReminders.changes} conta(s) vendida(s).`);
+  }
+
   // Try to migrate from old stock.json if it exists
   migrateFromJson(storageDir);
 
@@ -290,7 +300,7 @@ export function getStockSummary(): StockProduct[] {
       SUM(CASE WHEN status = 'disponivel' THEN 1 ELSE 0 END) as availableCount,
       COUNT(*) as totalCount,
       SUM(CASE WHEN status = 'disponivel' AND warranty_expires_at IS NOT NULL AND warranty_expires_at > ? THEN 1 ELSE 0 END) as activeWarrantyCount,
-      SUM(CASE WHEN reminder_at IS NOT NULL AND reminder_alert_sent = 0 THEN 1 ELSE 0 END) as activeReminderCount
+      SUM(CASE WHEN status = 'disponivel' AND reminder_at IS NOT NULL AND reminder_alert_sent = 0 THEN 1 ELSE 0 END) as activeReminderCount
     FROM items WHERE product_id = ?
   `);
 

@@ -19,7 +19,7 @@ async function run() {
         tag_name: tag,
         target_commitish: 'main',
         name: tag,
-        body: `deathStuffs ${tag}\n\n- Adiciona uma faixa discreta com a quantidade de lembretes, alertas de contas e garantias LZT ativos\n- Abre a lista correta ao clicar em cada indicador\n- Adiciona o filtro de contas com alerta ativo no Estoque\n- Atualiza o contador assim que um alerta de conta e disparado\n- Mantem todos os dados e fluxos atuais sem alteracao`,
+        body: `deathStuffs ${tag}\n\n- Cancela o alerta vinculado quando uma conta e marcada como vendida\n- Corrige automaticamente ao abrir o app as contas ja vendidas que ainda tinham alerta antigo\n- Remove contas vendidas do contador de alertas ativos\n- Impede o disparo de alertas antigos pertencentes a contas vendidas\n- Mantem garantias, lembretes gerais e demais dados do estoque inalterados`,
         draft: false,
         prerelease: false,
         make_latest: 'true'
